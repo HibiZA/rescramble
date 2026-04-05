@@ -1,0 +1,248 @@
+import { canvas, ctx, width, height } from './canvas.js';
+import { C } from './constants.js';
+import { keys, touch } from './input.js';
+import { spawnParticles, updateParticles } from './particles.js';
+import { createPlayer, SHIPS } from './entities.js';
+import { createWorld, spawnEnemies } from './level.js';
+import { updatePlayer, updateEnemies, updateBullets, updateBoss, updateHazards } from './physics.js';
+import { updateWorldObjects, cleanupWorldObjects } from './worldobjects.js';
+import { loadProgress, updateProgress } from './progress.js';
+import * as renderer from './renderer.js';
+import { sfxMenuSelect, resumeAudio, startMusic, setMusicIntensity, toggleMute, isMuted } from './audio.js';
+
+let state = 'menu';
+let prevState = 'menu'; // track where help was opened from
+let coopMode = false;
+let players = [];
+let world = {};
+let screenShake = 0;
+let gameTime = 0;
+let menuBob = 0;
+let transitionAlpha = 0;
+let transitionDir = 0;
+let startTimer = 0;
+let gameOverTimer = -1;
+let fps = 0, fpsFrames = 0, fpsLast = performance.now();
+const TICK_RATE = 1000 / 60; // fixed 60hz physics
+let accumulator = 0;
+let lastFrameTime = performance.now();
+
+let escWasDown = false;
+let hWasDown = false;
+let mWasDown = false;
+
+// Ship selection state
+let selectedShip = 0;
+let progress = loadProgress();
+let lastNewUnlocks = [];
+
+// Ship select input edge detection
+let leftWasDown = false;
+let rightWasDown = false;
+let enterWasDown = false;
+
+function startGame(coop, shipType) {
+  coopMode = coop;
+  players = [createPlayer(0, 220, 560, shipType || 0)];
+  if (coop) players.push(createPlayer(1, 260, 560, 0));
+  world = createWorld();
+  gameOverTimer = -1;
+  transitionAlpha = 1;
+  transitionDir = -1;
+  startTimer = 60;
+}
+
+function gameLoop() {
+  const now = performance.now();
+  const frameDt = now - lastFrameTime;
+  lastFrameTime = now;
+  accumulator += Math.min(frameDt, 100); // cap to avoid spiral of death
+
+  // FPS counter
+  fpsFrames++;
+  if (now - fpsLast >= 1000) {
+    fps = fpsFrames;
+    fpsFrames = 0;
+    fpsLast = now;
+  }
+
+  // Edge detection for Escape, H, and R keys
+  const escPressed = keys['Escape'] && !escWasDown;
+  escWasDown = !!keys['Escape'];
+  const hPressed = keys['KeyH'] && !hWasDown;
+  hWasDown = !!keys['KeyH'];
+  const mPressed = keys['KeyM'] && !mWasDown;
+  mWasDown = !!keys['KeyM'];
+  if (mPressed) toggleMute();
+
+  const enterPressed = keys['Enter'] && !enterWasDown;
+  enterWasDown = !!keys['Enter'];
+
+  // Fixed timestep: run physics at 60hz regardless of display refresh rate
+  while (accumulator >= TICK_RATE) {
+    accumulator -= TICK_RATE;
+    gameTime++;
+
+    // Save previous positions for interpolation
+    if (state === 'playing') {
+      for (const p of players) { p.prevX = p.x; p.prevY = p.y; }
+      for (const e of world.enemies) { e.prevX = e.x; e.prevY = e.y; }
+      for (const b of world.bullets) { b.prevX = b.x; b.prevY = b.y; }
+      for (const h of world.hazards) { h.prevX = h.x; h.prevY = h.y; }
+      for (const pu of world.powerups) { pu.prevX = pu.x; pu.prevY = pu.y; }
+      if (world.boss) { world.boss.prevX = world.boss.x; world.boss.prevY = world.boss.y; }
+    }
+
+    // Physics tick (only when playing)
+    if (state === 'playing') {
+      if (startTimer > 0) startTimer--;
+      spawnEnemies(world);
+      for (const p of players) updatePlayer(p, world, coopMode);
+      updateEnemies(world, players);
+      updateBoss(world, players);
+      const bs = updateBullets(world, players);
+      if (bs > screenShake) screenShake = bs;
+      const hs = updateHazards(world, players);
+      if (hs > screenShake) screenShake = hs;
+      updateWorldObjects(world.worldObjects, world.difficulty);
+      cleanupWorldObjects(world.worldObjects);
+      updateParticles();
+
+      if (players.every(p => !p.alive)) {
+        if (gameOverTimer < 0) gameOverTimer = 48;
+      }
+      if (gameOverTimer > 0) gameOverTimer--;
+      if (gameOverTimer === 0) {
+        state = 'gameover';
+        gameOverTimer = -1;
+        setMusicIntensity(0);
+        const result = updateProgress(players, world);
+        progress = result.progress;
+        lastNewUnlocks = result.newUnlocks;
+      }
+    } else if (state === 'menu') {
+      menuBob += 0.02;
+      updateParticles();
+    } else {
+      updateParticles();
+    }
+  }
+
+  const W = width(), H = height();
+
+  // Clear: reset transform for full canvas clear, then restore
+  ctx.save();
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.fillStyle = '#000';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.restore();
+
+  ctx.fillStyle = C.bg;
+  ctx.fillRect(0, 0, W, H);
+
+  switch (state) {
+    case 'menu':
+      renderer.renderMenu(menuBob, selectedShip, progress);
+      // Ship switching with A/D or left/right
+      {
+        const leftPressed = (keys['KeyA'] || keys['ArrowLeft']) && !leftWasDown;
+        leftWasDown = !!(keys['KeyA'] || keys['ArrowLeft']);
+        const rightPressed = (keys['KeyD'] || keys['ArrowRight']) && !rightWasDown;
+        rightWasDown = !!(keys['KeyD'] || keys['ArrowRight']);
+
+        if (leftPressed) {
+          selectedShip--;
+          if (selectedShip < 0) selectedShip = SHIPS.length - 1;
+          sfxMenuSelect();
+        }
+        if (rightPressed) {
+          selectedShip++;
+          if (selectedShip >= SHIPS.length) selectedShip = 0;
+          sfxMenuSelect();
+        }
+      }
+      // Start game
+      if (enterPressed || touch.jump) {
+        if (progress.unlockedShips.includes(selectedShip)) {
+          resumeAudio();
+          startMusic();
+          sfxMenuSelect();
+          setMusicIntensity(1);
+          startGame(false, selectedShip);
+          state = 'playing';
+        }
+        keys['Enter'] = false;
+        touch.jump = false;
+      }
+      if (keys['Digit2'] || keys['Numpad2']) {
+        if (progress.unlockedShips.includes(selectedShip)) {
+          resumeAudio();
+          startMusic();
+          sfxMenuSelect();
+          setMusicIntensity(1);
+          startGame(true, selectedShip);
+          state = 'playing';
+        }
+        keys['Digit2'] = false;
+      }
+      if (hPressed) { prevState = 'menu'; state = 'help'; }
+      break;
+
+    case 'playing': {
+      let shakeX = 0, shakeY = 0;
+      if (screenShake > 0) {
+        shakeX = (Math.random() - 0.5) * screenShake * 2;
+        shakeY = (Math.random() - 0.5) * screenShake * 2;
+        screenShake *= 0.88;
+        if (screenShake < 0.5) screenShake = 0;
+      }
+
+      ctx.save();
+      ctx.translate(shakeX, shakeY);
+      const lerpAlpha = accumulator / TICK_RATE; // 0-1: how far into the next tick
+      renderer.renderWorld(world, players, gameTime, { players, coopMode, world, startTimer, gameTime, fps, lerpAlpha });
+      ctx.restore();
+
+      // Pause
+      if (escPressed) { state = 'paused'; }
+      break;
+    }
+
+    case 'paused':
+      renderer.renderPaused(gameTime);
+      if (escPressed) { state = 'playing'; }
+      if (hPressed) { prevState = 'paused'; state = 'help'; }
+      break;
+
+    case 'help':
+      renderer.renderHelp(gameTime, isMuted());
+      if (escPressed) { state = prevState; }
+      break;
+
+    case 'gameover':
+      renderer.renderGameOver(players, world, gameTime, lastNewUnlocks);
+      if (enterPressed || touch.jump) {
+        sfxMenuSelect();
+        state = 'menu';
+        keys['Enter'] = false;
+        touch.jump = false;
+        lastNewUnlocks = [];
+      }
+      break;
+  }
+
+  if (transitionAlpha > 0 && transitionDir < 0) {
+    transitionAlpha -= 0.03;
+    ctx.save();
+    ctx.globalAlpha = Math.max(0, transitionAlpha);
+    ctx.fillStyle = '#000';
+    ctx.fillRect(0, 0, W, H);
+    ctx.restore();
+  }
+
+  requestAnimationFrame(gameLoop);
+}
+
+document.fonts.ready.then(() => {
+  gameLoop();
+});

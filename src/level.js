@@ -113,8 +113,9 @@ export function spawnEnemies(world) {
     world.enemies.push(e);
   }
 
-  // Don't spawn regular enemies while boss is alive
-  if (world.boss && world.boss.alive) return;
+  // Don't spawn during boss fight or post-boss cooldown
+  if (world.boss) return;
+  if (world.spawnPause > 0) { world.spawnPause--; return; }
 
   const spawnRate = Math.max(
     SPAWNING.minRate,

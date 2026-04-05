@@ -3,7 +3,7 @@ import { PLAYER, ENEMY_BULLET, SHIP_CONFIGS, FUEL } from './gameconfig.js';
 import { createBullet, createPowerUp, createEnemy } from './entities.js';
 import { keys, touch } from './input.js';
 import { spawnParticles } from './particles.js';
-import { sfxShoot, sfxRocket, sfxHit, sfxExplosion, sfxPlayerHit, sfxPowerup, sfxBomb, sfxFuelWarning, sfxFuelPickup, setMusicIntensity } from './audio.js';
+import { sfxShoot, sfxRocket, sfxHit, sfxExplosion, sfxPlayerHit, sfxPowerup, sfxBomb, sfxFuelWarning, sfxFuelPickup, sfxBossExplosion, resetBossDeathPitch, setMusicIntensity } from './audio.js';
 
 // ── Bomb activation ──
 let bWasDown = false;
@@ -416,7 +416,39 @@ function spawnDeathParticles(player) {
 // ── Update Boss ──
 export function updateBoss(world, players) {
   const boss = world.boss;
-  if (!boss || !boss.alive) return;
+  if (!boss) return;
+
+  // Boss death animation: rising-pitch explosions over 2 seconds
+  if (boss.dying) {
+    boss.deathTimer--;
+    // Explosions get faster as timer counts down
+    const interval = boss.deathTimer > 60 ? 10 : boss.deathTimer > 30 ? 6 : 3;
+    if (boss.deathTimer % interval === 0) {
+      const ox = boss.x + Math.random() * boss.w;
+      const oy = boss.y + Math.random() * boss.h;
+      const colors = ['#ff44ff', '#ffee44', '#ff3355', '#ffffff'];
+      spawnParticles(ox, oy, 0, colors[Math.random() * colors.length | 0], 12, 5);
+      sfxBossExplosion(); // rising pitch with each explosion
+    }
+    // Final big explosion
+    if (boss.deathTimer <= 0) {
+      for (let i = 0; i < 10; i++) {
+        spawnParticles(boss.x + Math.random() * boss.w, boss.y + Math.random() * boss.h, 0, '#ffee44', 25, 8);
+      }
+      world.screenFlash = 20;
+      sfxBomb();
+      resetBossDeathPitch();
+      // Award score + drop powerup
+      const scorer = players.find(p => p.alive) || players[0];
+      if (scorer) scorer.score += boss.score;
+      world.enemiesKilled += 10;
+      world.powerups.push(createPowerUp(boss.x + boss.w / 2, boss.y + boss.h / 2));
+      world.boss = null;
+    }
+    return;
+  }
+
+  if (!boss.alive) return;
 
   // If frozen by VOID bomb, skip
   if (world.bombEffect && world.bombEffect.type === 'void') return;
@@ -614,9 +646,9 @@ let _killStreakTimer = 0;
 function calculateFuelDropChance(scorer, world) {
   const fuelRatio = scorer.fuel / scorer.maxFuel; // 0 = empty, 1 = full
 
-  // Factor 1: Exponential urgency curve
-  // At 100% fuel: ~0.01 chance. At 50%: ~0.05. At 25%: ~0.15. At 10%: ~0.35
-  const urgency = Math.pow(1 - fuelRatio, 2.5) * 0.4;
+  // Factor 1: Exponential urgency curve (scaled down for scarcity)
+  // At 100%: ~0.005. At 50%: ~0.03. At 25%: ~0.08. At 10%: ~0.18
+  const urgency = Math.pow(1 - fuelRatio, 2.5) * 0.2;
 
   // Factor 2: Rate of change (are we losing fuel faster than gaining?)
   _fuelHistory.push(fuelRatio);
@@ -783,28 +815,14 @@ export function updateBullets(world, players) {
           spawnParticles(b.x, b.y, 0, '#ffffff', 3, 1);
           sfxHit();
           if (boss.hp <= 0) {
+            // Boss enters death animation (stays in world, not alive, explodes over time)
             boss.alive = false;
-            world.boss = null;
+            boss.dying = true;
+            boss.deathTimer = 120;
+            world.spawnPause = 180;
             setMusicIntensity(1);
-            // Big explosion
-            for (let i = 0; i < 5; i++) {
-              const ox = boss.x + Math.random() * boss.w;
-              const oy = boss.y + Math.random() * boss.h;
-              spawnParticles(ox, oy, 0, C.enemyBig, 20, 6);
-            }
-            spawnParticles(boss.x + boss.w / 2, boss.y + boss.h / 2, 0, '#ffee44', 30, 8);
-            sfxExplosion();
-            // Screen flash on boss death
-            world.screenFlash = 10;
-            // Award score
-            let scorer = players[0];
-            if (players.length > 1 && players[1].alive) {
-              if (Math.abs(players[1].x - (boss.x + boss.w / 2)) < Math.abs(players[0].x - (boss.x + boss.w / 2))) scorer = players[1];
-            }
-            if (scorer) scorer.score += boss.score;
-            world.enemiesKilled += 10;
-            // Spawn power-up
-            world.powerups.push(createPowerUp(boss.x + boss.w / 2, boss.y + boss.h / 2));
+            resetBossDeathPitch();
+            sfxBossExplosion();
           }
         }
       }

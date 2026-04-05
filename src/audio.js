@@ -91,6 +91,24 @@ export function sfxBomb() {
   osc.start(); osc.stop(audioCtx.currentTime + 0.4);
 }
 
+// Boss death explosion: each hit during death sequence, rising pitch for drama
+let bossDeathPitch = 60;
+export function sfxBossExplosion() {
+  if (muted) return;
+  bossDeathPitch += 8; // pitch rises with each explosion
+  if (bossDeathPitch > 300) bossDeathPitch = 300;
+  const osc = audioCtx.createOscillator();
+  const gain = audioCtx.createGain();
+  osc.type = 'sawtooth';
+  osc.frequency.setValueAtTime(bossDeathPitch, audioCtx.currentTime);
+  osc.frequency.exponentialRampToValueAtTime(bossDeathPitch * 0.3, audioCtx.currentTime + 0.2);
+  gain.gain.setValueAtTime(0.08, audioCtx.currentTime);
+  gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.25);
+  osc.connect(gain); gain.connect(audioCtx.destination);
+  osc.start(); osc.stop(audioCtx.currentTime + 0.25);
+}
+export function resetBossDeathPitch() { bossDeathPitch = 60; }
+
 // Boss warning: two low pulses
 export function sfxBossWarning() {
   play(160, 0.15, 'square', 0.06);

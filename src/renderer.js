@@ -291,22 +291,31 @@ export function renderWorld(world, players, gameTime, uiData) {
     }
   }
 
-  // Boss
-  if (world.boss && world.boss.alive) {
+  // Boss (alive or dying)
+  if (world.boss) {
     const boss = world.boss;
-    const [bx, by] = lerpPos(boss, lerp);
-    stampArt(boss.art, bx + boss.w / 2, by, '#ff44ff', 0.95);
-    const [gc, gr] = worldToGrid(bx + boss.w / 2, by - 12);
-    const barW = Math.max(8, Math.floor(boss.w / CW));
-    const filled = Math.ceil((boss.hp / boss.maxHp) * barW);
-    const bs = gc - Math.floor(barW / 2);
-    setCell(bs - 1, gr, '[', '#ff44ff', 0.8);
-    setCell(bs + barW, gr, ']', '#ff44ff', 0.8);
-    for (let i = 0; i < barW; i++) {
-      const bc = (filled / barW) > 0.5 ? '#44ff44' : (filled / barW) > 0.25 ? '#ffcc00' : '#ff3333';
-      setCell(bs + i, gr, i < filled ? '=' : '-', i < filled ? bc : '#333333', 0.8);
+    const bx = boss.x, by = boss.y;
+    if (boss.dying) {
+      // Flickering death animation - art flashes on and off
+      const flash = Math.floor(boss.deathTimer / 4) % 2 === 0;
+      if (flash) {
+        stampArt(boss.art, bx + boss.w / 2, by, '#ff2222', 0.7);
+      }
+      stampText('DESTROYED', bx + boss.w / 2, by - 16, '#ffee44', Math.sin(boss.deathTimer * 0.2) * 0.3 + 0.7, 'center');
+    } else if (boss.alive) {
+      stampArt(boss.art, bx + boss.w / 2, by, '#ff44ff', 0.95);
+      const [gc, gr] = worldToGrid(bx + boss.w / 2, by - 12);
+      const barW = Math.max(8, Math.floor(boss.w / CW));
+      const filled = Math.ceil((boss.hp / boss.maxHp) * barW);
+      const bs = gc - Math.floor(barW / 2);
+      setCell(bs - 1, gr, '[', '#ff44ff', 0.8);
+      setCell(bs + barW, gr, ']', '#ff44ff', 0.8);
+      for (let i = 0; i < barW; i++) {
+        const bc = (filled / barW) > 0.5 ? '#44ff44' : (filled / barW) > 0.25 ? '#ffcc00' : '#ff3333';
+        setCell(bs + i, gr, i < filled ? '=' : '-', i < filled ? bc : '#333333', 0.8);
+      }
+      stampText('BOSS', bx + boss.w / 2, by - 24, '#ff44ff', 0.9, 'center');
     }
-    stampText('BOSS', bx + boss.w / 2, by - 24, '#ff44ff', 0.9, 'center');
   }
 
   // Hazards

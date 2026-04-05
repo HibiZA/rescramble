@@ -256,10 +256,10 @@ export const ENEMY_BULLET = {
 export const FUEL = {
   maxFuel: 1000,
   startFuel: 1000,
-  burnRate: 0.5,          // fuel consumed per tick (60 ticks/sec = ~33 seconds to empty)
-  fuelPerKill: 15,        // fuel restored per enemy kill
-  fuelPickupAmount: 100,  // fuel from pickup item
-  fuelPickupChance: 0.15, // 15% chance a killed enemy drops fuel
+  burnRate: 0.5,          // fuel consumed per tick (~33 seconds to empty)
+  fuelPerKill: 8,         // fuel restored per enemy kill (was 15)
+  fuelPickupAmount: 80,   // fuel from pickup item (was 100)
+  fuelPickupChance: 0.08, // 8% base chance in adaptive algorithm (was 15%)
   warningThreshold: 0.25, // flash warning below 25%
 };
 

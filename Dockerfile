@@ -1,17 +1,22 @@
+# Stage 1: Build (bundle + minify JS)
+FROM node:20-alpine AS build
+WORKDIR /app
+COPY package.json ./
+RUN npm install
+COPY src/ ./src/
+RUN npx esbuild src/main.js --bundle --minify --outfile=dist/game.js --format=esm
+
+# Stage 2: Serve
 FROM nginx:alpine
 
-# Remove default config
 RUN rm /etc/nginx/conf.d/default.conf
-
-# Copy custom nginx config
 COPY nginx.conf /etc/nginx/conf.d/rescramble.conf
 
-# Copy game files
-COPY index.html /usr/share/nginx/html/
-COPY src/ /usr/share/nginx/html/src/
+# Copy production HTML + bundled JS
+COPY index.prod.html /usr/share/nginx/html/index.html
+COPY --from=build /app/dist/game.js /usr/share/nginx/html/game.js
 
-# Pre-create temp directories with correct ownership so nginx
-# doesn't need to chown at runtime (allows read-only + cap_drop)
+# Pre-create temp directories
 RUN mkdir -p /var/cache/nginx/client_temp \
              /var/cache/nginx/proxy_temp \
              /var/cache/nginx/fastcgi_temp \

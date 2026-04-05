@@ -3,8 +3,8 @@ services:
     build: .
     container_name: rescramble
     restart: always
-    ports:
-      - "8080:80"
+    expose:
+      - "80"
     read_only: true
     tmpfs:
       - /var/cache/nginx
@@ -18,3 +18,26 @@ services:
       - NET_BIND_SERVICE
     mem_limit: 64m
     cpus: 0.5
+    networks:
+      - web
+
+  caddy:
+    image: caddy:alpine
+    container_name: rescramble-caddy
+    restart: always
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    networks:
+      - web
+
+volumes:
+  caddy_data:
+  caddy_config:
+
+networks:
+  web:

@@ -26,8 +26,8 @@ services:
     container_name: rescramble-caddy
     restart: always
     ports:
-      - "80:80"
-      - "443:443"
+      - "65.108.211.204:80:80"
+      - "65.108.211.204:443:443"
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data

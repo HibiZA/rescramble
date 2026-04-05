@@ -437,10 +437,10 @@ export function renderMenu(menuBob, selectedShip, progress) {
   const isUnlocked = progress.unlockedShips.includes(selectedShip);
 
   // ── Title ──
-  stampText('=================', W / 2, 20, C.title, 0.3, 'center');
-  stampText('R E S C R A M B L E', W / 2, 42, C.title, 1.0, 'center');
-  stampText('=================', W / 2, 64, '#ff3355', 0.3, 'center');
-  stampText('>> ascii assault <<', W / 2, 82, '#ff3355', 0.5, 'center');
+  stampText('=================', W / 2, 10, C.title, 0.3, 'center');
+  stampText('R E S C R A M B L E', W / 2, 32, C.title, 1.0, 'center');
+  stampText('=================', W / 2, 54, '#ff3355', 0.3, 'center');
+  stampText('>> ascii assault <<', W / 2, 72, '#ff3355', 0.5, 'center');
 
   // ── Divider ──
   stampText('--------------------', W / 2, 104, C.ui, 0.2, 'center');

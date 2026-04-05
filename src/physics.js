@@ -491,12 +491,13 @@ export function updateHazards(world, players) {
     for (const p of players) {
       if (!p.alive || p.invincibleTimer > 0) continue;
       if (boxHit(p.x, p.y, p.w, p.h, h.x, h.y, h.w, h.h)) {
-        // Strip everything
+        // Strip everything + halve fuel
         p.hasSpread = false;
         p.hasRocket = false;
         p.hasRapid = false;
         p.speedBoost = 0;
         p.shieldHP = 0;
+        p.fuel = Math.floor(p.fuel / 2);
         p.invincibleTimer = 60; // brief invincibility so it doesn't keep triggering
         spawnParticles(p.x + p.w / 2, p.y + p.h / 2, 0, '#ff8800', 20, 5);
         shake = Math.max(shake, 4);
@@ -528,21 +529,151 @@ function getNearestPlayer(players, x) {
   return best && best.alive ? best : players.find(p => p.alive) || players[0];
 }
 
-function checkPowerupDrop(world, enemy) {
-  if (world.enemiesKilled >= world.nextPowerup) {
-    world.nextPowerup += 20 + Math.floor(Math.random() * 15);
-    world.powerups.push(createPowerUp(enemy.x + enemy.w / 2, enemy.y + enemy.h / 2));
+// ── Adaptive weapon drop algorithm ──
+// Factors:
+//   1. Weapon loadout: fewer weapons = higher chance (catch-up mechanic)
+//   2. Difficulty scaling: higher difficulty = slightly more drops (keeps pace with harder enemies)
+//   3. Drought timer: longer since last drop = increasing pressure
+//   4. Enemy value: bigger enemies have higher base drop chance
+//   5. Random jitter for unpredictability
+// Weapons: spread, rocket, rapid (3 total). Bombs/shields also in the pool.
+
+let _lastWeaponDrop = 0;
+let _weaponDroughtKills = 0; // kills since last weapon drop
+
+function checkPowerupDrop(world, enemy, players) {
+  _weaponDroughtKills++;
+  const x = enemy.x + enemy.w / 2;
+  const y = enemy.y + enemy.h / 2;
+
+  // Find the scoring player's weapon count
+  const scorer = players ? (players.find(p => p.alive) || players[0]) : null;
+  let weaponCount = 0;
+  if (scorer) {
+    if (scorer.hasSpread) weaponCount++;
+    if (scorer.hasRocket) weaponCount++;
+    if (scorer.hasRapid) weaponCount++;
+    if (scorer.shieldHP > 0) weaponCount += 0.5;
+    if (scorer.bombs > 1) weaponCount += 0.3;
   }
+  // 0 = naked, 3+ = fully loaded
+
+  // Factor 1: Weapon poverty (fewer weapons = more drops)
+  // 0 weapons: 0.08 base. 1: 0.04. 2: 0.02. 3: 0.008
+  const poverty = Math.max(0.008, 0.08 * Math.pow(0.5, weaponCount));
+
+  // Factor 2: Difficulty scaling
+  // Higher difficulty = slightly more generous (compensate for harder enemies)
+  const diffBonus = Math.min(world.difficulty * 0.002, 0.03);
+
+  // Factor 3: Drought (kills since last weapon drop)
+  // After 30 kills with no drop, start boosting. Caps at +0.06
+  const droughtBoost = _weaponDroughtKills > 30
+    ? Math.min((_weaponDroughtKills - 30) / 500, 0.06) : 0;
+
+  // Factor 4: Enemy value (bigger enemies = better loot chance)
+  let valueMult = 1.0;
+  if (enemy.enemyType === 'big' || enemy.enemyType === 'spawner') valueMult = 2.5;
+  else if (enemy.enemyType === 'medium' || enemy.enemyType === 'shielded') valueMult = 1.5;
+  else if (enemy.enemyType === 'small' || enemy.enemyType === 'kamikaze') valueMult = 0.8;
+
+  // Factor 5: Jitter
+  const jitter = 1 + (Math.random() - 0.5) * 0.5;
+
+  let chance = (poverty + diffBonus + droughtBoost) * valueMult * jitter;
+
+  // Clamp
+  chance = Math.max(0.005, Math.min(0.25, chance));
+
+  // Suppress when fully loaded (3+ weapons)
+  if (weaponCount >= 3) chance *= 0.3;
+
+  if (Math.random() < chance) {
+    world.powerups.push(createPowerUp(x, y));
+    _weaponDroughtKills = 0;
+    _lastWeaponDrop = world.gameTimer;
+  }
+}
+
+// ── Adaptive fuel drop algorithm ──
+// Monitors player fuel level and adjusts drop probability dynamically.
+// Uses multiple factors to create natural-feeling fuel economy:
+//   1. Fuel ratio (lower fuel = higher chance)
+//   2. Rate of fuel loss (burning faster than gaining = more drops)
+//   3. Drought timer (longer since last fuel drop = increasing pressure)
+//   4. Kill streak bonus (rapid kills slightly boost chance)
+//   5. Random jitter so it never feels predictable
+// The result is: you almost never see fuel when full, occasionally when half,
+// and frequently (but not guaranteed) when critically low.
+
+let _fuelHistory = []; // rolling window of fuel levels
+let _lastFuelDrop = 0; // game timer of last fuel drop
+let _killStreak = 0;   // kills within a short window
+let _killStreakTimer = 0;
+
+function calculateFuelDropChance(scorer, world) {
+  const fuelRatio = scorer.fuel / scorer.maxFuel; // 0 = empty, 1 = full
+
+  // Factor 1: Exponential urgency curve
+  // At 100% fuel: ~0.01 chance. At 50%: ~0.05. At 25%: ~0.15. At 10%: ~0.35
+  const urgency = Math.pow(1 - fuelRatio, 2.5) * 0.4;
+
+  // Factor 2: Rate of change (are we losing fuel faster than gaining?)
+  _fuelHistory.push(fuelRatio);
+  if (_fuelHistory.length > 120) _fuelHistory.shift(); // 2-second window
+  const fuelTrend = _fuelHistory.length > 10
+    ? (_fuelHistory[_fuelHistory.length - 1] - _fuelHistory[_fuelHistory.length - 10]) / 10
+    : 0;
+  // Negative trend = losing fuel = boost drop chance
+  const trendBoost = fuelTrend < 0 ? Math.min(Math.abs(fuelTrend) * 50, 0.1) : 0;
+
+  // Factor 3: Drought timer (frames since last fuel drop)
+  const drought = world.gameTimer - _lastFuelDrop;
+  // After 600 frames (~10s) with no drop, start boosting. Caps at +0.15
+  const droughtBoost = drought > 600 ? Math.min((drought - 600) / 3000, 0.15) : 0;
+
+  // Factor 4: Kill streak (rapid kills = small bonus)
+  _killStreakTimer--;
+  if (_killStreakTimer <= 0) { _killStreak = 0; }
+  _killStreak++;
+  _killStreakTimer = 30; // streak resets after 0.5 seconds of no kills
+  const streakBonus = _killStreak > 5 ? 0.03 : _killStreak > 3 ? 0.01 : 0;
+
+  // Factor 5: Random jitter ±20% of base value
+  const jitter = 1 + (Math.random() - 0.5) * 0.4;
+
+  // Combine all factors
+  let chance = (urgency + trendBoost + droughtBoost + streakBonus) * jitter;
+
+  // Hard floor: never below 1% so there's always a tiny chance
+  chance = Math.max(0.01, chance);
+
+  // Hard ceiling: never above 40% so it's never guaranteed
+  chance = Math.min(0.40, chance);
+
+  // At full fuel (>95%), suppress to near-zero
+  if (fuelRatio > 0.95) chance *= 0.1;
+
+  return chance;
 }
 
 function applyFuelOnKill(scorer, world, enemy) {
   if (!scorer) return;
   scorer.fuel = Math.min(scorer.fuel + FUEL.fuelPerKill, scorer.maxFuel);
-  // Fuel rocks ALWAYS drop fuel; other enemies have a chance
+
+  // Fuel rocks ALWAYS drop fuel
   if (enemy.isFuelRock) {
     world.powerups.push(createPowerUp(enemy.x + enemy.w / 2, enemy.y + enemy.h / 2, 'fuel'));
-  } else if (Math.random() < FUEL.fuelPickupChance) {
+    _lastFuelDrop = world.gameTimer;
+    return;
+  }
+
+  // Adaptive drop chance based on player state
+  const dropChance = calculateFuelDropChance(scorer, world);
+  if (Math.random() < dropChance) {
     world.powerups.push(createPowerUp(enemy.x + enemy.w / 2, enemy.y + enemy.h / 2, 'fuel'));
+    _lastFuelDrop = world.gameTimer;
+    _fuelHistory.length = 0; // reset trend after a drop
   }
 }
 
@@ -615,7 +746,7 @@ export function updateBullets(world, players) {
                   const col = getEnemyDeathColor(ae.enemyType);
                   spawnParticles(ae.x + ae.w / 2, ae.y + ae.h / 2, 0, col, 8, 3);
                   sfxExplosion();
-                  checkPowerupDrop(world, ae);
+                  checkPowerupDrop(world, ae, players);
                   applyFuelOnKill(scorer, world, ae);
                 }
               }
@@ -633,7 +764,7 @@ export function updateBullets(world, players) {
               spawnParticles(e.x + e.w / 2, e.y + e.h / 2, 0, col, e.enemyType === 'big' ? 18 : 10, 4);
               sfxExplosion();
               // no shake for enemy kills
-              checkPowerupDrop(world, e);
+              checkPowerupDrop(world, e, players);
               applyFuelOnKill(scorer, world, e);
             } else {
               spawnParticles(b.x, b.y, 0, '#ffffff', 3, 1);

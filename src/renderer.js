@@ -329,8 +329,10 @@ export function renderWorld(world, players, gameTime, uiData) {
   for (const b of world.bullets) {
     if (!b.alive) continue;
     const [bx, by] = lerpPos(b, lerp);
-    const gc = Math.round(bx / CW), gr = Math.round(by / CH);
-    const ox = (bx / CW - gc) * CW, oy = (by / CH - gr) * CH;
+    const bgx = (bx - gridOffsetX) / CW;
+    const bgy = by / CH;
+    const gc = Math.round(bgx), gr = Math.round(bgy);
+    const ox = (bgx - gc) * CW, oy = (bgy - gr) * CH;
     if (b.owner === 'player') {
       if (b.isRocket) {
         setCell(gc, gr, '#', '#ffcc44', 0.95, ox, oy);
@@ -348,8 +350,10 @@ export function renderWorld(world, players, gameTime, uiData) {
 
   // Particles (with sub-pixel offsets)
   for (const p of particles) {
-    const gc = Math.round(p.x / CW), gr = Math.round(p.y / CH);
-    const ox = (p.x / CW - gc) * CW, oy = (p.y / CH - gr) * CH;
+    const pgx = (p.x - gridOffsetX) / CW;
+    const pgy = p.y / CH;
+    const gc = Math.round(pgx), gr = Math.round(pgy);
+    const ox = (pgx - gc) * CW, oy = (pgy - gr) * CH;
     setCell(gc, gr, p.char, p.color, p.life * 0.85, ox, oy);
   }
 
@@ -366,13 +370,16 @@ export function renderWorld(world, players, gameTime, uiData) {
     const color = p.id === 0 ? C.player1 : C.player2;
     const art = getPlayerShipArt(p);
     stampArt(art, px + p.w / 2, py, color, 1.0);
+    // Compute sub-pixel offsets matching stampArt for consistent alignment
+    const pcx = (px + p.w / 2 - gridOffsetX) / CW;
+    const pcy = py / CH;
+    const sc = Math.round(pcx), sr = Math.round(pcy);
+    const pox = (pcx - sc) * CW, poy = (pcy - sr) * CH;
     // Exhaust (center column of art)
-    const [sc, sr] = worldToGrid(px + p.w / 2, py);
-    const ec = sc; // center column
-    setCell(ec, sr + art.length, gameTime % 4 < 2 ? '*' : '^', '#4488ff', 0.5);
-    setCell(ec, sr + art.length + 1, '.', '#2244aa', 0.25);
+    setCell(sc, sr + art.length, gameTime % 4 < 2 ? '*' : '^', '#4488ff', 0.5, pox, poy);
+    setCell(sc, sr + art.length + 1, '.', '#2244aa', 0.25, pox, poy);
     if (p.shieldHP > 0) {
-      for (let i = 0; i < p.shieldHP; i++) setCell(sc - Math.floor(p.shieldHP / 2) + i, sr - 1, 'O', C.powerup, 0.6);
+      for (let i = 0; i < p.shieldHP; i++) setCell(sc - Math.floor(p.shieldHP / 2) + i, sr - 1, 'O', C.powerup, 0.6, pox, poy);
     }
   }
 

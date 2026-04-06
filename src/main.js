@@ -1,4 +1,4 @@
-import { canvas, ctx, width, height } from './canvas.js';
+import { canvas, ctx, width, height, screenToGame } from './canvas.js';
 import { C } from './constants.js';
 import { keys, touch } from './input.js';
 import { spawnParticles, updateParticles } from './particles.js';
@@ -56,6 +56,17 @@ let menuScores = [];
 
 // Fetch leaderboard for menu on load
 fetchScores().then(scores => { menuScores = scores || []; });
+
+// GitHub link click handler (help screen)
+canvas.addEventListener('click', (e) => {
+  if (state !== 'help') return;
+  const H = height();
+  const { x, y } = screenToGame(e.clientX, e.clientY);
+  // GitHub link region: centered, near bottom (H - 46)
+  if (y > H - 56 && y < H - 36 && x > 80 && x < 400) {
+    window.open('https://github.com/HibiZA/rescramble', '_blank');
+  }
+});
 
 // Capture text input for name entry
 window.addEventListener('keydown', (e) => {

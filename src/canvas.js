@@ -39,3 +39,11 @@ window.addEventListener('resize', resize);
 // Always returns fixed game dimensions
 export function width() { return WORLD_W; }
 export function height() { return WORLD_H; }
+
+// Convert screen coordinates to game coordinates
+export function screenToGame(screenX, screenY) {
+  return {
+    x: (screenX - _offsetX) / _scale,
+    y: (screenY - _offsetY) / _scale,
+  };
+}

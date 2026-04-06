@@ -728,6 +728,7 @@ export function renderHelp(gameTime, isMuted, page, totalPages) {
   }
 
   // Navigation footer
+  stampText('[*] github.com/HibiZA/rescramble', W / 2, H - 46, C.ui, 0.3, 'center');
   const navY = H - 28;
   if (page > 0) stampText('<< A', W / 2 - 80, navY, C.ui, 0.5, 'center');
   if (page < totalPages - 1) stampText('D >>', W / 2 + 80, navY, C.ui, 0.5, 'center');

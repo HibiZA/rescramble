@@ -32,6 +32,10 @@ let slowMo = 1.0; // slow-motion factor (1.0 = normal, <1 = slow)
 let escWasDown = false;
 let hWasDown = false;
 let mWasDown = false;
+let helpPage = 0;
+const HELP_PAGES = 3;
+let helpLeftWas = false;
+let helpRightWas = false;
 
 // Ship selection state
 let selectedShip = 0;
@@ -237,7 +241,7 @@ function gameLoop() {
         }
         keys['Digit2'] = false;
       }
-      if (hPressed) { prevState = 'menu'; state = 'help'; }
+      if (hPressed) { prevState = 'menu'; state = 'help'; helpPage = 0; }
       break;
 
     case 'playing': {
@@ -263,13 +267,27 @@ function gameLoop() {
     case 'paused':
       renderer.renderPaused(gameTime);
       if (escPressed) { state = 'playing'; }
-      if (hPressed) { prevState = 'paused'; state = 'help'; }
+      if (hPressed) { prevState = 'paused'; state = 'help'; helpPage = 0; }
       break;
 
-    case 'help':
-      renderer.renderHelp(gameTime, isMuted());
-      if (escPressed) { state = prevState; }
+    case 'help': {
+      renderer.renderHelp(gameTime, isMuted(), helpPage, HELP_PAGES);
+      if (escPressed) { state = prevState; helpPage = 0; }
+      // Page navigation with own edge detection
+      const hlDown = !!(keys['KeyA'] || keys['ArrowLeft']);
+      const hrDown = !!(keys['KeyD'] || keys['ArrowRight']);
+      if (hrDown && !helpRightWas && helpPage < HELP_PAGES - 1) {
+        helpPage++;
+        sfxMenuSelect();
+      }
+      if (hlDown && !helpLeftWas && helpPage > 0) {
+        helpPage--;
+        sfxMenuSelect();
+      }
+      helpLeftWas = hlDown;
+      helpRightWas = hrDown;
       break;
+    }
 
     case 'gameover':
       if (!nameSubmitted) {

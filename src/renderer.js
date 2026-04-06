@@ -396,9 +396,9 @@ export function renderWorld(world, players, gameTime, uiData) {
     if (pl[0].rapidLevel > 0) weaps.push('RPD' + pl[0].rapidLevel);
     if (weaps.length) stampText(weaps.join('+'), 10, 24, C.powerup, 0.7, 'left');
 
-    // Bomb count display
+    // Ability charge display
     if (pl[0].bombs > 0) {
-      stampText(`B:${pl[0].bombs}`, 10, 40, '#ff44ff', 0.8, 'left');
+      stampText(`AB:${pl[0].bombs}`, 10, 40, '#ff44ff', 0.8, 'left');
     }
 
     // Fuel bar (bottom of screen, near the player)
@@ -491,7 +491,7 @@ export function renderMenu(menuBob, selectedShip, progress, menuScores) {
     stampArt(ship.art, W / 2, 128, C.player1, 0.95);
     stampText(ship.name, W / 2, 192, C.player1, 0.8, 'center');
     stampText(ship.ability, W / 2, 210, C.powerup, 0.5, 'center');
-    stampText(`BOMB: ${ship.bombName}`, W / 2, 228, '#ff44ff', 0.5, 'center');
+    stampText(`ABILITY: ${ship.bombName}`, W / 2, 228, '#ff44ff', 0.5, 'center');
   } else {
     stampText('[LOCKED]', W / 2, 148, '#ff3355', 0.7, 'center');
     stampText(ship.name, W / 2, 192, '#554444', 0.5, 'center');
@@ -510,9 +510,10 @@ export function renderMenu(menuBob, selectedShip, progress, menuScores) {
     for (let i = 0; i < maxShow; i++) {
       const s = menuScores[i];
       const rank = `${i + 1}.`.padStart(3);
-      const name = (s.name || '???').padEnd(10).slice(0, 10);
-      const score = String(s.score).padStart(7);
-      stampText(`${rank} ${name} ${score}`, W / 2, 310 + i * 16, C.text, 0.5, 'center');
+      const name = (s.name || '???').padEnd(8).slice(0, 8);
+      const ship = (s.ship || '').slice(0, 3).padEnd(3);
+      const score = String(s.score).padStart(6);
+      stampText(`${rank} ${name} ${ship} ${score}`, W / 2, 310 + i * 16, C.text, 0.5, 'center');
     }
   }
 
@@ -527,7 +528,7 @@ export function renderMenu(menuBob, selectedShip, progress, menuScores) {
 
   // ── Bottom ──
   stampText('WASD:Move SPACE:Fire', W / 2, H - 64, C.ui, 0.3, 'center');
-  stampText('B:Bomb H:Help', W / 2, H - 48, C.ui, 0.3, 'center');
+  stampText('B:Ability H:Help', W / 2, H - 48, C.ui, 0.3, 'center');
 
   ctx.save(); renderGrid(); ctx.restore();
 }
@@ -598,12 +599,13 @@ export function renderGameOver(players, world, gameTime, newUnlocks, nameInput, 
       for (let i = 0; i < maxShow; i++) {
         const s = leaderboardScores[i];
         const rank = `${i + 1}.`.padStart(3);
-        const name = (s.name || '???').padEnd(12).slice(0, 12);
-        const score = String(s.score).padStart(7);
+        const name = (s.name || '???').padEnd(8).slice(0, 8);
+        const ship = (s.ship || '').slice(0, 3).padEnd(3);
+        const score = String(s.score).padStart(6);
         const isYou = s.name === (nameInput || '').trim() && s.score === total;
         const color = isYou ? C.score : C.text;
         const alpha = isYou ? 0.9 : 0.5;
-        stampText(`${rank} ${name} ${score}`, W / 2, baseY, color, alpha, 'center');
+        stampText(`${rank} ${name} ${ship} ${score}`, W / 2, baseY, color, alpha, 'center');
         baseY += 15;
       }
     }
@@ -615,86 +617,122 @@ export function renderGameOver(players, world, gameTime, newUnlocks, nameInput, 
   ctx.save(); renderGrid(); ctx.restore();
 }
 
-export function renderHelp(gameTime, isMuted) {
+export function renderHelp(gameTime, isMuted, page, totalPages) {
   ensureCW();
   const W = width(), H = height();
   const cols = Math.ceil(W / CW) + 1, rows = Math.ceil(H / CH) + 1;
   initGrid(cols, rows);
   fillBackground(gameTime * 0.2);
 
-  const L = W / 2 - 80; // left column
-  const R = W / 2 + 30;  // right column
-  let y = 10;
+  page = page || 0;
+  totalPages = totalPages || 3;
+  const L = W / 2 - 100;
+  const R = W / 2 + 20;
 
-  stampText('HOW TO PLAY', W / 2, y, C.title, 1.0, 'center');
-  y += 28;
+  // Page header
+  stampText('HOW TO PLAY', W / 2, 8, C.title, 1.0, 'center');
+  stampText(`${page + 1}/${totalPages}`, W / 2, 28, C.ui, 0.4, 'center');
+  let y = 48;
 
-  // Controls - two columns
-  stampText('CONTROLS', W / 2, y, C.ui, 0.6, 'center'); y += 18;
-  stampText('Move', L, y, C.text, 0.4, 'left');
-  stampText('WASD/Arrows', R, y, C.text, 0.5, 'left'); y += 16;
-  stampText('Fire', L, y, C.text, 0.4, 'left');
-  stampText('SPACE', R, y, C.text, 0.5, 'left'); y += 16;
-  stampText('Bomb', L, y, C.text, 0.4, 'left');
-  stampText('B', R, y, C.text, 0.5, 'left'); y += 16;
-  stampText('Pause', L, y, C.text, 0.4, 'left');
-  stampText('ESC', R, y, C.text, 0.5, 'left'); y += 16;
-  stampText('Mute', L, y, C.text, 0.4, 'left');
-  stampText('M', R, y, C.text, 0.5, 'left');
-  y += 22;
+  if (page === 0) {
+    // ── PAGE 1: Controls & Basics ──
+    stampText('CONTROLS', W / 2, y, C.ui, 0.7, 'center'); y += 28;
+    stampText('Move', L, y, C.text, 0.5, 'left');
+    stampText('WASD / Arrows', R, y, C.text, 0.6, 'left'); y += 22;
+    stampText('Fire', L, y, C.text, 0.5, 'left');
+    stampText('SPACE', R, y, C.text, 0.6, 'left'); y += 22;
+    stampText('Ability', L, y, C.text, 0.5, 'left');
+    stampText('B', R, y, C.text, 0.6, 'left'); y += 22;
+    stampText('Pause', L, y, C.text, 0.5, 'left');
+    stampText('ESC', R, y, C.text, 0.6, 'left'); y += 22;
+    stampText('Mute', L, y, C.text, 0.5, 'left');
+    stampText('M', R, y, C.text, 0.6, 'left');
+    y += 40;
 
-  // Enemies - art on left, info on right
-  stampText('ENEMIES', W / 2, y, C.ui, 0.6, 'center'); y += 18;
+    stampText('THE BASICS', W / 2, y, C.ui, 0.7, 'center'); y += 28;
+    stampText('Kill enemies to score', W / 2, y, C.text, 0.45, 'center'); y += 18;
+    stampText('and restore fuel', W / 2, y, C.text, 0.45, 'center'); y += 28;
+    stampText('Fuel drains constantly', W / 2, y, '#ffcc00', 0.45, 'center'); y += 18;
+    stampText('and faster each level', W / 2, y, '#ffcc00', 0.45, 'center'); y += 28;
+    stampText('Boss every 10 levels', W / 2, y, '#ff44ff', 0.5, 'center'); y += 28;
+    stampText('Hazards strip ALL upgrades', W / 2, y, '#ff8800', 0.5, 'center');
 
-  stampText('\\v/', L + 10, y, C.enemySmall, 0.7, 'left');
-  stampText('Small   1HP  10pt', R - 20, y, C.enemySmall, 0.45, 'left'); y += 16;
+  } else if (page === 1) {
+    // ── PAGE 2: Ships & Power-ups ──
+    stampText('SHIPS', W / 2, y, C.ui, 0.7, 'center'); y += 28;
 
-  stampText('={O}=', L, y, C.enemyMed, 0.7, 'left');
-  stampText('Medium  3HP  25pt', R - 20, y, C.enemyMed, 0.45, 'left'); y += 16;
+    const ships = [
+      { name: 'SCOUT', passive: '-20% fuel burn', ability: 'EMP BLAST' },
+      { name: 'FALCON', passive: '+50% spd, kill rush', ability: 'SONIC DASH', unlock: 'Score 5000+' },
+      { name: 'FORTRESS', passive: '+1 dmg, +2 shield, slow', ability: 'WALL', unlock: 'Reach LV15' },
+      { name: 'STRIKER', passive: 'Spr2+Rpd1, 2 lives', ability: 'MEGA BURST', unlock: '500 kills' },
+      { name: 'PHANTOM', passive: 'Kills pause fuel drain', ability: 'VOID', unlock: 'Reach LV25' },
+    ];
 
-  stampText('([===])', L - 5, y, C.enemyBig, 0.7, 'left');
-  stampText('Big     6HP  50pt', R - 20, y, C.enemyBig, 0.45, 'left'); y += 16;
+    for (const s of ships) {
+      stampText(s.name, L, y, C.player1, 0.8, 'left');
+      stampText(s.passive, R - 10, y, C.text, 0.45, 'left'); y += 16;
+      stampText(`  ${s.ability}`, L, y, '#ff44ff', 0.35, 'left');
+      if (s.unlock) stampText(s.unlock, R - 10, y, C.ui, 0.25, 'left');
+      y += 26;
+    }
 
-  stampText('={=}=', L, y, '#4488ff', 0.7, 'left');
-  stampText('Shield  4HP  40pt', R - 20, y, '#4488ff', 0.45, 'left'); y += 16;
+    y += 10;
+    stampText('POWER-UPS', W / 2, y, C.ui, 0.7, 'center'); y += 28;
+    stampText('<3> Spread (levels up)', L, y, C.powerup, 0.45, 'left'); y += 22;
+    stampText('<F> Rapid (levels up)', L, y, C.powerup, 0.45, 'left'); y += 22;
+    stampText('<R> Rocket (AOE dmg)', L, y, C.powerup, 0.45, 'left'); y += 22;
+    stampText('<O> Shield +3 HP', L, y, C.powerup, 0.45, 'left'); y += 22;
+    stampText('<S> Speed boost', L, y, C.powerup, 0.45, 'left'); y += 22;
+    stampText('<B> +1 Ability charge', L, y, '#ff44ff', 0.45, 'left');
 
-  stampText('\\!/', L + 10, y, '#ff6622', 0.7, 'left');
-  stampText('Kamikaze     15pt', R - 20, y, '#ff6622', 0.45, 'left'); y += 16;
+  } else if (page === 2) {
+    // ── PAGE 3: Enemies ──
+    stampText('ENEMIES', W / 2, y, C.ui, 0.7, 'center'); y += 30;
 
-  stampText('{===}', L, y, C.enemyBig, 0.7, 'left');
-  stampText('Spawner 8HP  75pt', R - 20, y, C.enemyBig, 0.45, 'left'); y += 16;
+    stampText('\\v/', L + 20, y, C.enemySmall, 0.8, 'left');
+    stampText('Small', W / 2 - 30, y, C.enemySmall, 0.6, 'left');
+    stampText('1 HP   10 pts', R + 10, y, C.text, 0.45, 'left'); y += 28;
 
-  stampText('(*)', L + 10, y, '#ff8800', 0.7, 'left');
-  stampText('Mine    prox  5pt', R - 20, y, '#ff8800', 0.45, 'left');
-  y += 22;
+    stampText('={O}=', L + 10, y, C.enemyMed, 0.8, 'left');
+    stampText('Medium', W / 2 - 30, y, C.enemyMed, 0.6, 'left');
+    stampText('3 HP   25 pts', R + 10, y, C.text, 0.45, 'left'); y += 28;
 
-  // Boss
-  stampText('BOSS', W / 2, y, '#ff44ff', 0.6, 'center'); y += 18;
-  stampText('Every 10 LVs', W / 2, y, '#ff44ff', 0.35, 'center'); y += 14;
-  stampText('Bigger at LV20, LV30+', W / 2, y, '#ff44ff', 0.35, 'center');
-  y += 22;
+    stampText('([===])', L + 5, y, C.enemyBig, 0.8, 'left');
+    stampText('Big', W / 2 - 30, y, C.enemyBig, 0.6, 'left');
+    stampText('6 HP   50 pts', R + 10, y, C.text, 0.45, 'left'); y += 28;
 
-  // Power-ups - grid layout
-  stampText('POWER-UPS', W / 2, y, C.ui, 0.6, 'center'); y += 18;
-  stampText('<3> Spread', L, y, C.powerup, 0.45, 'left');
-  stampText('<S> Speed', R, y, C.powerup, 0.45, 'left'); y += 16;
-  stampText('<O> Shield', L, y, C.powerup, 0.45, 'left');
-  stampText('<R> Rocket', R, y, C.powerup, 0.45, 'left'); y += 16;
-  stampText('<F> Rapid', L, y, C.powerup, 0.45, 'left');
-  stampText('<B> Bomb', R, y, C.powerup, 0.45, 'left'); y += 16;
-  stampText('+F+ Fuel', L, y, '#ffaa22', 0.45, 'left');
-  y += 22;
+    stampText('={=}=', L + 10, y, '#4488ff', 0.8, 'left');
+    stampText('Shielded', W / 2 - 30, y, '#4488ff', 0.6, 'left');
+    stampText('4 HP   40 pts', R + 10, y, C.text, 0.45, 'left'); y += 28;
 
-  // Tips
-  stampText('TIPS', W / 2, y, C.ui, 0.6, 'center'); y += 18;
-  stampText('Weapons stack!', W / 2, y, C.text, 0.35, 'center'); y += 14;
-  stampText('Rockets have AOE', W / 2, y, C.text, 0.35, 'center'); y += 14;
-  stampText('Hazards strip all buffs', W / 2, y, '#ff8800', 0.35, 'center');
-  y += 22;
+    stampText('\\!/', L + 20, y, '#ff6622', 0.8, 'left');
+    stampText('Kamikaze', W / 2 - 30, y, '#ff6622', 0.6, 'left');
+    stampText('1 HP   15 pts', R + 10, y, C.text, 0.45, 'left'); y += 16;
+    stampText('Tracks you and accelerates', W / 2, y, C.text, 0.3, 'center'); y += 28;
 
-  // Sound + back
-  stampText(isMuted ? 'M:Unmute' : 'M:Mute', W / 2, y, C.ui, 0.4, 'center'); y += 18;
-  stampText('ESC to go back', W / 2, y, C.ui, 0.5, 'center');
+    stampText('{===}', L + 10, y, C.enemyBig, 0.8, 'left');
+    stampText('Spawner', W / 2 - 30, y, C.enemyBig, 0.6, 'left');
+    stampText('8 HP   75 pts', R + 10, y, C.text, 0.45, 'left'); y += 16;
+    stampText('Creates small enemies', W / 2, y, C.text, 0.3, 'center'); y += 28;
+
+    stampText('(*)', L + 20, y, '#ff8800', 0.8, 'left');
+    stampText('Mine', W / 2 - 30, y, '#ff8800', 0.6, 'left');
+    stampText('1 HP    5 pts', R + 10, y, C.text, 0.45, 'left'); y += 16;
+    stampText('Explodes when you get close', W / 2, y, C.text, 0.3, 'center'); y += 36;
+
+    stampText('BOSS', W / 2, y, '#ff44ff', 0.7, 'center'); y += 24;
+    stampText('Appears every 10 levels', W / 2, y, '#ff44ff', 0.4, 'center'); y += 20;
+    stampText('Gets bigger at LV20 and LV30', W / 2, y, '#ff44ff', 0.4, 'center'); y += 20;
+    stampText('Spread + aimed shots', W / 2, y, '#ff44ff', 0.35, 'center');
+  }
+
+  // Navigation footer
+  const navY = H - 28;
+  if (page > 0) stampText('<< A', W / 2 - 80, navY, C.ui, 0.5, 'center');
+  if (page < totalPages - 1) stampText('D >>', W / 2 + 80, navY, C.ui, 0.5, 'center');
+  stampText(isMuted ? 'M:Unmute' : 'M:Mute', W / 2, navY, C.ui, 0.3, 'center');
+  stampText('ESC to go back', W / 2, H - 10, C.ui, 0.5, 'center');
 
   ctx.save(); renderGrid(); ctx.restore();
 }

@@ -139,9 +139,9 @@ export function spawnEnemies(world) {
     spawnSmalls(world);
   } else if (roll < 0.05 && d >= SPAWNING.spawnerUnlocksAt) {
     spawnSpawner(world);
-  } else if (roll < 0.10 && d >= SPAWNING.mineUnlocksAt) {
+  } else if (roll < 0.13 && d >= SPAWNING.mineUnlocksAt) {
     spawnMines(world);
-  } else if (roll < 0.18 && d >= SPAWNING.shieldedUnlocksAt) {
+  } else if (roll < 0.21 && d >= SPAWNING.shieldedUnlocksAt) {
     spawnShielded(world);
   } else if (roll < 0.28 && d >= SPAWNING.kamikazeUnlocksAt) {
     spawnKamikaze(world);

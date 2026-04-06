@@ -46,9 +46,9 @@ export function activateBomb(player, world) {
       break;
     }
     case 'SONIC DASH': {
-      // Player becomes invincible for 3 seconds (180 frames) and moves 3x speed
-      world.bombEffect = { type: 'sonic_dash', timer: 180, playerId: player.id };
-      player.invincibleTimer = Math.max(player.invincibleTimer, 180);
+      // Invincible + 3x speed + damage enemies on contact for 2 seconds
+      world.bombEffect = { type: 'sonic_dash', timer: 120, playerId: player.id };
+      player.invincibleTimer = Math.max(player.invincibleTimer, 120);
       break;
     }
     case 'WALL': {
@@ -141,11 +141,12 @@ export function updatePlayer(p, world, coopMode) {
 
     // Spread: LV0=1 bullet, LV1=3, LV2=5, LV3=7
     const bulletCount = 1 + (p.spreadLevel || 0) * 2;
-    world.bullets.push(createBullet(cx, top, 0, spd, 'player', DAMAGE.playerBullet));
+    const dmg = DAMAGE.playerBullet + (p.damageBonus || 0);
+    world.bullets.push(createBullet(cx, top, 0, spd, 'player', dmg));
     for (let i = 1; i < bulletCount; i += 2) {
       const angle = ((i + 1) / 2) * 1.4;
-      world.bullets.push(createBullet(cx, top, -angle, spd, 'player', DAMAGE.playerBullet));
-      world.bullets.push(createBullet(cx, top, angle, spd, 'player', DAMAGE.playerBullet));
+      world.bullets.push(createBullet(cx, top, -angle, spd, 'player', dmg));
+      world.bullets.push(createBullet(cx, top, angle, spd, 'player', dmg));
     }
 
     sfxShoot();
@@ -167,10 +168,14 @@ export function updatePlayer(p, world, coopMode) {
     activateBomb(p, world);
   }
 
-  // Fuel drain (scales with difficulty)
-  const burnExtra = world.difficulty > FUEL.burnRateScaleStart
-    ? (world.difficulty - FUEL.burnRateScaleStart) * FUEL.burnRateScale : 0;
-  p.fuel -= FUEL.burnRate + burnExtra;
+  // Fuel drain (scales with difficulty, modified by ship)
+  if (p.fuelPauseTimer > 0) {
+    p.fuelPauseTimer--;
+  } else {
+    const burnExtra = world.difficulty > FUEL.burnRateScaleStart
+      ? (world.difficulty - FUEL.burnRateScaleStart) * FUEL.burnRateScale : 0;
+    p.fuel -= (FUEL.burnRate + burnExtra) * (p.fuelBurnMult || 1.0);
+  }
   if (p.fuel <= 0) {
     p.fuel = 0;
     p.lives = 0;
@@ -287,8 +292,8 @@ export function updateEnemies(world, players) {
           }
         }
       }
-      // Mines still scroll down slowly so they eventually leave screen
-      e.y += 0.2;
+      // Mines drift down into the play area
+      e.y += 0.8;
       if (e.y > WORLD_H + 60) e.alive = false;
       continue;
     }
@@ -752,6 +757,10 @@ function applyFuelOnKill(scorer, world, enemy) {
   if (!scorer) return;
   scorer.fuel = Math.min(scorer.fuel + FUEL.fuelPerKill, scorer.maxFuel);
 
+  // Ship passives on kill
+  if (scorer.killSpeedFrames > 0) scorer.speedBoost = Math.max(scorer.speedBoost, scorer.killSpeedFrames);
+  if (scorer.fuelPauseOnKill > 0) scorer.fuelPauseTimer = Math.max(scorer.fuelPauseTimer || 0, scorer.fuelPauseOnKill);
+
   // Fuel rocks ALWAYS drop fuel
   if (enemy.isFuelRock) {
     world.powerups.push(createPowerUp(enemy.x + enemy.w / 2, enemy.y + enemy.h / 2, 'fuel'));
@@ -914,6 +923,30 @@ export function updateBullets(world, players) {
             }
           }
           break;
+        }
+      }
+    }
+  }
+
+  // Sonic Dash: invincible player damages enemies on contact
+  if (world.bombEffect && world.bombEffect.type === 'sonic_dash') {
+    for (const e of world.enemies) {
+      if (!e.alive) continue;
+      for (const p of players) {
+        if (!p.alive || p.id !== world.bombEffect.playerId) continue;
+        if (boxHit(p.x, p.y, p.w, p.h, e.x, e.y, e.w, e.h)) {
+          e.hp -= 3;
+          spawnParticles(e.x + e.w / 2, e.y + e.h / 2, 0, '#00ffcc', 8, 3);
+          if (e.hp <= 0) {
+            e.alive = false;
+            world.enemiesKilled++;
+            p.score += e.score;
+            applyFuelOnKill(p, world, e);
+            checkPowerupDrop(world, e, players);
+            sfxExplosion();
+          } else {
+            sfxHit();
+          }
         }
       }
     }

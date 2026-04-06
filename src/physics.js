@@ -18,8 +18,9 @@ export function activateBomb(player, world) {
   const shipCfg = SHIP_CONFIGS[shipType];
   const bombName = shipCfg ? shipCfg.bombName : 'EMP BLAST';
 
-  // Trigger screen flash
+  // Trigger screen flash + brief slow-mo
   world.screenFlash = 10;
+  world.bombSlowMo = 18;
 
   switch (bombName) {
     case 'EMP BLAST': {
@@ -163,8 +164,10 @@ export function updatePlayer(p, world, coopMode) {
     activateBomb(p, world);
   }
 
-  // Fuel drain
-  p.fuel -= FUEL.burnRate;
+  // Fuel drain (scales with difficulty)
+  const burnExtra = world.difficulty > FUEL.burnRateScaleStart
+    ? (world.difficulty - FUEL.burnRateScaleStart) * FUEL.burnRateScale : 0;
+  p.fuel -= FUEL.burnRate + burnExtra;
   if (p.fuel <= 0) {
     p.fuel = 0;
     p.lives = 0;
@@ -653,9 +656,9 @@ let _killStreakTimer = 0;
 function calculateFuelDropChance(scorer, world) {
   const fuelRatio = scorer.fuel / scorer.maxFuel; // 0 = empty, 1 = full
 
-  // Factor 1: Exponential urgency curve (scaled down for scarcity)
-  // At 100%: ~0.005. At 50%: ~0.03. At 25%: ~0.08. At 10%: ~0.18
-  const urgency = Math.pow(1 - fuelRatio, 2.5) * 0.2;
+  // Factor 1: Exponential urgency curve
+  // At 100%: ~0.002. At 50%: ~0.015. At 25%: ~0.04. At 10%: ~0.09
+  const urgency = Math.pow(1 - fuelRatio, 2.5) * 0.1;
 
   // Factor 2: Rate of change (are we losing fuel faster than gaining?)
   _fuelHistory.push(fuelRatio);
@@ -664,19 +667,19 @@ function calculateFuelDropChance(scorer, world) {
     ? (_fuelHistory[_fuelHistory.length - 1] - _fuelHistory[_fuelHistory.length - 10]) / 10
     : 0;
   // Negative trend = losing fuel = boost drop chance
-  const trendBoost = fuelTrend < 0 ? Math.min(Math.abs(fuelTrend) * 50, 0.1) : 0;
+  const trendBoost = fuelTrend < 0 ? Math.min(Math.abs(fuelTrend) * 30, 0.05) : 0;
 
   // Factor 3: Drought timer (frames since last fuel drop)
   const drought = world.gameTimer - _lastFuelDrop;
-  // After 600 frames (~10s) with no drop, start boosting. Caps at +0.15
-  const droughtBoost = drought > 600 ? Math.min((drought - 600) / 3000, 0.15) : 0;
+  // After 900 frames (~15s) with no drop, start boosting. Caps at +0.08
+  const droughtBoost = drought > 900 ? Math.min((drought - 900) / 5000, 0.08) : 0;
 
   // Factor 4: Kill streak (rapid kills = small bonus)
   _killStreakTimer--;
   if (_killStreakTimer <= 0) { _killStreak = 0; }
   _killStreak++;
   _killStreakTimer = 30; // streak resets after 0.5 seconds of no kills
-  const streakBonus = _killStreak > 5 ? 0.03 : _killStreak > 3 ? 0.01 : 0;
+  const streakBonus = _killStreak > 5 ? 0.015 : _killStreak > 3 ? 0.005 : 0;
 
   // Factor 5: Random jitter ±20% of base value
   const jitter = 1 + (Math.random() - 0.5) * 0.4;
@@ -684,14 +687,14 @@ function calculateFuelDropChance(scorer, world) {
   // Combine all factors
   let chance = (urgency + trendBoost + droughtBoost + streakBonus) * jitter;
 
-  // Hard floor: never below 1% so there's always a tiny chance
-  chance = Math.max(0.01, chance);
+  // Hard floor: never below 0.5% so there's always a tiny chance
+  chance = Math.max(0.005, chance);
 
-  // Hard ceiling: never above 40% so it's never guaranteed
-  chance = Math.min(0.40, chance);
+  // Hard ceiling: never above 20%
+  chance = Math.min(0.20, chance);
 
   // At full fuel (>95%), suppress to near-zero
-  if (fuelRatio > 0.95) chance *= 0.1;
+  if (fuelRatio > 0.95) chance *= 0.05;
 
   return chance;
 }

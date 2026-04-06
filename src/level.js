@@ -71,6 +71,7 @@ export function createWorld() {
     bombEffect: null,
     screenFlash: 0,
     hitStop: 0,
+    bombSlowMo: 0,
     spawnPause: 0,
     worldObjects: createWorldObjects(),
   };

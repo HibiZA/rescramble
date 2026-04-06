@@ -118,10 +118,17 @@ function gameLoop() {
       cleanupWorldObjects(world.worldObjects);
       updateParticles();
 
+      // Bomb slow-mo: brief time dilation on bomb activation
+      if (world.bombSlowMo > 0) {
+        world.bombSlowMo--;
+        if (gameOverTimer < 0) slowMo = 0.4; // only if not already in death slow-mo
+        if (world.bombSlowMo <= 0) slowMo = 1.0;
+      }
+
       if (players.every(p => !p.alive)) {
         if (gameOverTimer < 0) {
           gameOverTimer = 48;
-          slowMo = 0.2; // slow-mo on death
+          slowMo = 0.2; // slow-mo on death (overrides bomb slow-mo)
         }
       }
       if (gameOverTimer > 0) {

@@ -247,12 +247,14 @@ export const ENEMY_BULLET = {
 export const FUEL = {
   maxFuel: 1000,
   startFuel: 1000,
-  burnRate: 0.5,          // fuel consumed per tick (~33 seconds to empty)
-  fuelPerKill: 8,         // fuel restored per enemy kill (was 15)
-  fuelPickupAmount: 80,   // fuel from pickup item (was 100)
+  burnRate: 0.5,              // base fuel consumed per tick (~33 seconds to empty)
+  burnRateScaleStart: 8,      // difficulty level where burn rate starts increasing
+  burnRateScale: 0.02,        // extra burn per tick per difficulty level above scaleStart
+  fuelPerKill: 3,             // fuel restored per enemy kill
+  fuelPickupAmount: 80,       // fuel from pickup item
   // Reserved: adaptive algorithm in physics.js controls fuel pickup chance
-  fuelPickupChance: 0.08, // 8% base chance in adaptive algorithm (was 15%)
-  warningThreshold: 0.25, // flash warning below 25%
+  fuelPickupChance: 0.08,     // 8% base chance in adaptive algorithm
+  warningThreshold: 0.25,     // flash warning below 25%
 };
 
 // ── Hazard ──

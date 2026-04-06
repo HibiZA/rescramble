@@ -438,6 +438,22 @@ export function renderWorld(world, players, gameTime, uiData) {
     ctx.fillRect(0, 0, W, H);
     ctx.restore();
   }
+
+  // 5. Last-life tension: pulsing red vignette when one hit from death
+  if (uiData) {
+    const p0 = uiData.players[0];
+    if (p0 && p0.alive && p0.lives === 1 && p0.shieldHP <= 0) {
+      const pulse = (Math.sin(uiData.gameTime * 0.08) + 1) * 0.5; // 0-1
+      const alpha = 0.06 + pulse * 0.1;
+      const grad = ctx.createRadialGradient(W / 2, H / 2, H * 0.25, W / 2, H / 2, H * 0.7);
+      grad.addColorStop(0, 'rgba(0,0,0,0)');
+      grad.addColorStop(1, `rgba(255,30,30,${alpha})`);
+      ctx.save();
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, 0, W, H);
+      ctx.restore();
+    }
+  }
 }
 
 // ── Menu ──

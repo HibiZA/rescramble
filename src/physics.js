@@ -426,9 +426,9 @@ export function updateBoss(world, players) {
     boss.deathTimer--;
     // Drift toward screen center so the explosion is visible
     const centerX = WORLD_W / 2 - boss.w / 2;
-    const centerY = WORLD_H * 0.3;
-    boss.x += (centerX - boss.x) * 0.04;
-    boss.y += (centerY - boss.y) * 0.04;
+    const centerY = WORLD_H * 0.4 - boss.h / 2;
+    boss.x += (centerX - boss.x) * 0.08;
+    boss.y += (centerY - boss.y) * 0.08;
     // Explosions get faster as timer counts down
     const interval = boss.deathTimer > 60 ? 10 : boss.deathTimer > 30 ? 6 : 3;
     if (boss.deathTimer % interval === 0) {

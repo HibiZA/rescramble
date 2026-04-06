@@ -11,12 +11,21 @@ app.use(express.json({ limit: '1kb' }));
 app.set('trust proxy', 1);
 
 // ── Origin check ──
-const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS || 'https://rescramble.app').split(',');
+const ALLOWED_ORIGINS = new Set(
+  (process.env.ALLOWED_ORIGINS || 'https://rescramble.app').split(',').map(o => o.trim())
+);
 
 function checkOrigin(req, res, next) {
-  const origin = req.get('origin') || req.get('referer') || '';
-  // Allow in development (no origin = same-origin request)
-  if (!origin || ALLOWED_ORIGINS.some(o => origin.startsWith(o))) {
+  const origin = req.get('origin') || '';
+  // Require a valid origin — blocks curl/scripts that send no Origin header.
+  // Same-origin browser requests include the Origin header for POST.
+  if (!origin) {
+    // Allow GET requests without origin (browser navigation, same-origin fetch)
+    if (req.method === 'GET') return next();
+    return res.status(403).json({ error: 'Forbidden' });
+  }
+  // Exact match against allowed origins
+  if (ALLOWED_ORIGINS.has(origin)) {
     return next();
   }
   return res.status(403).json({ error: 'Forbidden' });
@@ -41,33 +50,37 @@ function rateLimit(req, res, next) {
   next();
 }
 
-setInterval(() => {
-  const now = Date.now();
-  for (const [ip, timestamps] of submitLog) {
-    const valid = timestamps.filter(t => now - t < RATE_WINDOW);
-    if (valid.length === 0) submitLog.delete(ip);
-    else submitLog.set(ip, valid);
-  }
-}, 300_000);
-
 // ── Session tokens ──
-// Single-use tokens issued when a game starts, consumed on score submit.
-const activeTokens = new Map(); // token -> { ip, createdAt }
-const TOKEN_RATE_WINDOW = 10_000; // 10s between token requests per IP
+const activeTokens = new Map();
+const TOKEN_RATE_WINDOW = 10_000;
 const tokenRequestLog = new Map();
 
 function generateToken() {
   return crypto.randomBytes(24).toString('base64url');
 }
 
-// Cleanup stale tokens every 30 minutes (tokens with no expiry can accumulate
-// from games that were abandoned without submitting)
+// Cleanup all in-memory maps every 5 minutes
 setInterval(() => {
-  const staleThreshold = Date.now() - 3_600_000; // 1 hour
+  const now = Date.now();
+
+  // Stale tokens (abandoned games, never submitted)
+  const staleThreshold = now - 3_600_000;
   for (const [token, data] of activeTokens) {
     if (data.createdAt < staleThreshold) activeTokens.delete(token);
   }
-}, 1_800_000);
+
+  // Rate limit logs
+  for (const [ip, timestamps] of submitLog) {
+    const valid = timestamps.filter(t => now - t < RATE_WINDOW);
+    if (valid.length === 0) submitLog.delete(ip);
+    else submitLog.set(ip, valid);
+  }
+
+  // Token request log (remove entries older than the rate window)
+  for (const [ip, ts] of tokenRequestLog) {
+    if (now - ts > TOKEN_RATE_WINDOW) tokenRequestLog.delete(ip);
+  }
+}, 300_000);
 
 // ── Sanity bounds ──
 const MAX_SCORE = 999_999;
@@ -83,12 +96,16 @@ function sanitizeName(raw) {
   return clean;
 }
 
-// ── POST /api/token — Request a session token when game starts ──
+// ── Health check ──
+app.get('/api/health', (req, res) => {
+  res.json({ status: 'ok' });
+});
+
+// ── POST /api/token ──
 app.post('/api/token', checkOrigin, (req, res) => {
   const ip = req.ip;
   const now = Date.now();
 
-  // Rate limit token requests
   const lastRequest = tokenRequestLog.get(ip) || 0;
   if (now - lastRequest < TOKEN_RATE_WINDOW) {
     return res.status(429).json({ error: 'Too many requests' });
@@ -121,7 +138,6 @@ app.post('/api/scores', checkOrigin, rateLimit, (req, res) => {
     return res.status(401).json({ error: 'Invalid or already used token' });
   }
 
-  // Token must come from the same IP that requested it
   if (tokenData.ip !== req.ip) {
     return res.status(401).json({ error: 'Token mismatch' });
   }
@@ -140,15 +156,12 @@ app.post('/api/scores', checkOrigin, rateLimit, (req, res) => {
     return res.status(400).json({ error: 'Invalid score' });
   }
 
-  // Validate level
   const cleanLevel = (typeof level === 'number' && Number.isInteger(level) && level >= 0 && level <= MAX_LEVEL)
     ? level : 0;
 
-  // Validate kills
   const cleanKills = (typeof kills === 'number' && Number.isInteger(kills) && kills >= 0 && kills <= MAX_KILLS)
     ? kills : 0;
 
-  // Validate ship
   const cleanShip = (typeof ship === 'string' && VALID_SHIPS.includes(ship)) ? ship : '';
 
   // Consistency check

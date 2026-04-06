@@ -334,8 +334,8 @@ export function updateEnemies(world, players) {
         case 'zigzag': {
           e.y += e.speed;
           const d = e.patternData;
-          e.x = (d.originX || e.x) + Math.sin(e.y * d.freq + d.phase) * d.amp;
-          if (!d.originX) d.originX = e.x;
+          if (d.originX == null) d.originX = e.x;
+          e.x = d.originX + Math.sin(e.y * d.freq + d.phase) * d.amp;
           break;
         }
         case 'vformation':
@@ -554,17 +554,21 @@ export function updateHazards(world, players) {
   }
   world.hazards = world.hazards.filter(h => h.alive);
 
-  // Bullets pass through hazards (they're unkillable) - but show a deflect particle
-  for (const b of world.bullets) {
+  // Bullets deflect off hazards (they're unkillable)
+  for (let i = world.bullets.length - 1; i >= 0; i--) {
+    const b = world.bullets[i];
     if (!b.alive || b.owner !== 'player') continue;
     for (const h of world.hazards) {
       if (!h.alive) continue;
       if (b.x > h.x && b.x < h.x + h.w && b.y > h.y && b.y < h.y + h.h) {
         b.alive = false;
         spawnParticles(b.x, b.y, 0, '#888888', 3, 1);
+        break;
       }
     }
   }
+  // Remove bullets killed by hazard deflection (prevents off-by-one with next tick)
+  world.bullets = world.bullets.filter(b => b.alive);
 
   return shake;
 }

@@ -144,22 +144,23 @@ function gameLoop() {
       cleanupWorldObjects(world.worldObjects);
       updateParticles();
 
-      // Bomb slow-mo: brief time dilation on bomb activation
-      if (world.bombSlowMo > 0) {
-        world.bombSlowMo--;
-        if (gameOverTimer < 0) slowMo = 0.4; // only if not already in death slow-mo
-        if (world.bombSlowMo <= 0) slowMo = 1.0;
-      }
-
       if (players.every(p => !p.alive)) {
         if (gameOverTimer < 0) {
           gameOverTimer = 48;
-          slowMo = 0.2; // slow-mo on death (overrides bomb slow-mo)
+          slowMo = 0.2;
+          world.bombSlowMo = 0; // death overrides bomb slow-mo
         }
       }
+
+      // Bomb slow-mo: only runs when not in death sequence
+      if (gameOverTimer < 0 && world.bombSlowMo > 0) {
+        world.bombSlowMo--;
+        slowMo = 0.4;
+        if (world.bombSlowMo <= 0) slowMo = 1.0;
+      }
+
       if (gameOverTimer > 0) {
         gameOverTimer--;
-        // Ramp slow-mo back toward normal as we approach game over screen
         slowMo = Math.min(1.0, slowMo + 0.015);
       }
       if (gameOverTimer === 0) {
@@ -284,7 +285,9 @@ function gameLoop() {
             const shipName = SHIPS[players[0].shipType || 0]?.name || 'SCOUT';
             submitScore(nameInput.trim(), total, world.difficulty, world.enemiesKilled, shipName)
               .then(() => fetchScores())
-              .then(scores => { leaderboardScores = scores || []; leaderboardFetched = true; });
+              .then(scores => { leaderboardScores = scores || []; })
+              .catch(() => { leaderboardScores = []; })
+              .finally(() => { leaderboardFetched = true; });
           }
         }
       } else {

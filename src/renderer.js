@@ -2,7 +2,7 @@ import { ctx, width, height } from './canvas.js';
 import { C } from './constants.js';
 import { FUEL } from './gameconfig.js';
 import {
-  SHIP_ART, SHIP2_ART, SHIPS,
+  SHIP2_ART, SHIPS,
   ENEMY_SMALL_ART, ENEMY_SMALL_ALT,
   ENEMY_MED_ART, ENEMY_MED_ALT,
   ENEMY_BIG_ART, ENEMY_BIG_ALT,
@@ -187,7 +187,7 @@ function getEnemyColor(type) {
 function getPlayerShipArt(player) {
   if (player.id === 1) return SHIP2_ART;
   const ship = SHIPS[player.shipType || 0];
-  return ship ? ship.art : SHIP_ART;
+  return ship ? ship.art : SHIPS[0].art;
 }
 
 // ── Interpolation ──
@@ -294,7 +294,7 @@ export function renderWorld(world, players, gameTime, uiData) {
   // Boss (alive or dying)
   if (world.boss) {
     const boss = world.boss;
-    const bx = boss.x, by = boss.y;
+    const [bx, by] = lerpPos(boss, lerp);
     if (boss.dying) {
       // Flickering death animation - art flashes on and off
       const flash = Math.floor(boss.deathTimer / 4) % 2 === 0;
@@ -311,7 +311,8 @@ export function renderWorld(world, players, gameTime, uiData) {
       setCell(bs - 1, gr, '[', '#ff44ff', 0.8);
       setCell(bs + barW, gr, ']', '#ff44ff', 0.8);
       for (let i = 0; i < barW; i++) {
-        const bc = (filled / barW) > 0.5 ? '#44ff44' : (filled / barW) > 0.25 ? '#ffcc00' : '#ff3333';
+        const hpRatio = boss.hp / boss.maxHp;
+        const bc = hpRatio > 0.5 ? '#44ff44' : hpRatio > 0.25 ? '#ffcc00' : '#ff3333';
         setCell(bs + i, gr, i < filled ? '=' : '-', i < filled ? bc : '#333333', 0.8);
       }
       stampText('BOSS', bx + boss.w / 2, by - 24, '#ff44ff', 0.9, 'center');
@@ -506,7 +507,7 @@ export function renderMenu(menuBob, selectedShip, progress) {
 
   // ── Bottom ──
   stampText('WASD:Move SPACE:Fire', W / 2, H - 64, C.ui, 0.3, 'center');
-  stampText('B:Bomb S+SPACE:Drop H:Help', W / 2, H - 48, C.ui, 0.3, 'center');
+  stampText('B:Bomb H:Help', W / 2, H - 48, C.ui, 0.3, 'center');
 
   ctx.save(); renderGrid(); ctx.restore();
 }
@@ -575,8 +576,6 @@ export function renderHelp(gameTime, isMuted) {
   stampText('SPACE', R, y, C.text, 0.5, 'left'); y += 16;
   stampText('Bomb', L, y, C.text, 0.4, 'left');
   stampText('B', R, y, C.text, 0.5, 'left'); y += 16;
-  stampText('Drop Bomb', L, y, C.text, 0.4, 'left');
-  stampText('DOWN+SPACE', R, y, C.text, 0.5, 'left'); y += 16;
   stampText('Pause', L, y, C.text, 0.4, 'left');
   stampText('ESC', R, y, C.text, 0.5, 'left'); y += 16;
   stampText('Mute', L, y, C.text, 0.4, 'left');

@@ -4,11 +4,11 @@ import { keys, touch } from './input.js';
 import { spawnParticles, updateParticles } from './particles.js';
 import { createPlayer, SHIPS } from './entities.js';
 import { createWorld, spawnEnemies } from './level.js';
-import { updatePlayer, updateEnemies, updateBullets, updateBoss, updateHazards } from './physics.js';
+import { updatePlayer, updateEnemies, updateBullets, updateBoss, updateHazards, resetPhysicsState, updateWorldTimers } from './physics.js';
 import { updateWorldObjects, cleanupWorldObjects } from './worldobjects.js';
 import { loadProgress, updateProgress } from './progress.js';
 import * as renderer from './renderer.js';
-import { sfxMenuSelect, resumeAudio, startMusic, setMusicIntensity, toggleMute, isMuted } from './audio.js';
+import { sfxMenuSelect, resumeAudio, startMusic, stopMusic, setMusicIntensity, toggleMute, isMuted } from './audio.js';
 
 let state = 'menu';
 let prevState = 'menu'; // track where help was opened from
@@ -26,6 +26,7 @@ let fps = 0, fpsFrames = 0, fpsLast = performance.now();
 const TICK_RATE = 1000 / 60; // fixed 60hz physics
 let accumulator = 0;
 let lastFrameTime = performance.now();
+let slowMo = 1.0; // slow-motion factor (1.0 = normal, <1 = slow)
 
 let escWasDown = false;
 let hWasDown = false;
@@ -42,11 +43,13 @@ let rightWasDown = false;
 let enterWasDown = false;
 
 function startGame(coop, shipType) {
+  resetPhysicsState();
   coopMode = coop;
   players = [createPlayer(0, 220, 560, shipType || 0)];
   if (coop) players.push(createPlayer(1, 260, 560, 0));
   world = createWorld();
   gameOverTimer = -1;
+  slowMo = 1.0;
   transitionAlpha = 1;
   transitionDir = -1;
   startTimer = 60;
@@ -56,7 +59,7 @@ function gameLoop() {
   const now = performance.now();
   const frameDt = now - lastFrameTime;
   lastFrameTime = now;
-  accumulator += Math.min(frameDt, 100); // cap to avoid spiral of death
+  accumulator += Math.min(frameDt, 100) * slowMo; // cap to avoid spiral of death
 
   // FPS counter
   fpsFrames++;
@@ -95,6 +98,12 @@ function gameLoop() {
 
     // Physics tick (only when playing)
     if (state === 'playing') {
+      // Hit-stop: freeze frames on big impacts
+      if (world.hitStop > 0) {
+        world.hitStop--;
+        continue; // skip this physics tick entirely
+      }
+
       if (startTimer > 0) startTimer--;
       spawnEnemies(world);
       for (const p of players) updatePlayer(p, world, coopMode);
@@ -102,6 +111,7 @@ function gameLoop() {
       updateBoss(world, players);
       const bs = updateBullets(world, players);
       if (bs > screenShake) screenShake = bs;
+      updateWorldTimers(world);
       const hs = updateHazards(world, players);
       if (hs > screenShake) screenShake = hs;
       updateWorldObjects(world.worldObjects, world.difficulty);
@@ -109,13 +119,21 @@ function gameLoop() {
       updateParticles();
 
       if (players.every(p => !p.alive)) {
-        if (gameOverTimer < 0) gameOverTimer = 48;
+        if (gameOverTimer < 0) {
+          gameOverTimer = 48;
+          slowMo = 0.2; // slow-mo on death
+        }
       }
-      if (gameOverTimer > 0) gameOverTimer--;
+      if (gameOverTimer > 0) {
+        gameOverTimer--;
+        // Ramp slow-mo back toward normal as we approach game over screen
+        slowMo = Math.min(1.0, slowMo + 0.015);
+      }
       if (gameOverTimer === 0) {
         state = 'gameover';
         gameOverTimer = -1;
-        setMusicIntensity(0);
+        slowMo = 1.0;
+        stopMusic();
         const result = updateProgress(players, world);
         progress = result.progress;
         lastNewUnlocks = result.newUnlocks;

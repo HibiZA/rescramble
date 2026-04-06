@@ -3,7 +3,7 @@
 // Purely visual, no collision. Adds variety as you progress.
 // ═══════════════════════════════════════════════════════
 
-import { WORLD_W } from './constants.js';
+import { WORLD_W, WORLD_H } from './constants.js';
 
 // ── Object art by type ──
 const OBJECTS = {
@@ -143,7 +143,7 @@ export function updateWorldObjects(state, difficulty) {
     const o = state.objects[i];
     o.y += o.speed;
     // Remove when off screen
-    if (o.y > 700) {
+    if (o.y > WORLD_H + 60) {
       state.objects.splice(i, 1);
     }
   }

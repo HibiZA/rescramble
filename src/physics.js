@@ -1,9 +1,10 @@
 import { WORLD_W, WORLD_H, C } from './constants.js';
-import { PLAYER, ENEMY_BULLET, SHIP_CONFIGS, FUEL } from './gameconfig.js';
+import { PLAYER, ENEMY_BULLET, SHIP_CONFIGS, FUEL, BOSS, ENEMIES, DAMAGE } from './gameconfig.js';
 import { createBullet, createPowerUp, createEnemy } from './entities.js';
 import { keys, touch } from './input.js';
 import { spawnParticles } from './particles.js';
 import { sfxShoot, sfxRocket, sfxHit, sfxExplosion, sfxPlayerHit, sfxPowerup, sfxBomb, sfxFuelWarning, sfxFuelPickup, sfxBossExplosion, resetBossDeathPitch, setMusicIntensity } from './audio.js';
+import { scaleEnemy } from './level.js';
 
 // ── Bomb activation ──
 let bWasDown = false;
@@ -88,7 +89,7 @@ export function updatePlayer(p, world, coopMode) {
     bombSpeedMult = 3.0;
   }
 
-  const spd = (PLAYER.baseSpeed + (p.speedBoost > 0 ? 2 : 0)) * speedMult * bombSpeedMult;
+  const spd = (PLAYER.baseSpeed + (p.speedBoost > 0 ? PLAYER.speedBoostAmount : 0)) * speedMult * bombSpeedMult;
 
   if (p.id === 0) {
     if (keys['KeyA'] || touch.left) ix = -1;
@@ -138,11 +139,11 @@ export function updatePlayer(p, world, coopMode) {
     const spd = -PLAYER.bulletSpeed;
 
     if (p.hasSpread) {
-      world.bullets.push(createBullet(cx, top, 0, spd, 'player'));
-      world.bullets.push(createBullet(cx, top, -2.5, spd, 'player'));
-      world.bullets.push(createBullet(cx, top, 2.5, spd, 'player'));
+      world.bullets.push(createBullet(cx, top, 0, spd, 'player', DAMAGE.playerBullet));
+      world.bullets.push(createBullet(cx, top, -2.5, spd, 'player', DAMAGE.playerBullet));
+      world.bullets.push(createBullet(cx, top, 2.5, spd, 'player', DAMAGE.playerBullet));
     } else {
-      world.bullets.push(createBullet(cx, top, 0, spd, 'player'));
+      world.bullets.push(createBullet(cx, top, 0, spd, 'player', DAMAGE.playerBullet));
     }
 
     sfxShoot();
@@ -152,9 +153,9 @@ export function updatePlayer(p, world, coopMode) {
   // Rockets: separate slower cooldown (3x bullet rate)
   if (fire && p.hasRocket && p.rocketCooldown <= 0) {
     const cx = p.x + p.w / 2;
-    world.bullets.push(createBullet(cx, p.y - 8, 0, -PLAYER.bulletSpeed * 0.6, 'player', 3, true));
+    world.bullets.push(createBullet(cx, p.y - 8, 0, -PLAYER.bulletSpeed * 0.6, 'player', DAMAGE.rocketDirect, true));
     sfxRocket();
-    p.rocketCooldown = PLAYER.fireRate * 3;
+    p.rocketCooldown = PLAYER.rocketFireRate;
   }
 
   // Bomb activation
@@ -169,6 +170,7 @@ export function updatePlayer(p, world, coopMode) {
     p.lives = 0;
     spawnDeathParticles(p);
     world.screenFlash = 10;
+    world.hitStop = 4;
     p.alive = false;
     sfxPlayerHit();
     return;
@@ -211,8 +213,8 @@ export function updatePlayer(p, world, coopMode) {
       if (pu.kind === 'spread') p.hasSpread = true;
       else if (pu.kind === 'rocket') p.hasRocket = true;
       else if (pu.kind === 'rapid') p.hasRapid = true;
-      else if (pu.kind === 'speed') p.speedBoost = 600;
-      else if (pu.kind === 'shield') p.shieldHP = Math.min(p.shieldHP + 3, 5);
+      else if (pu.kind === 'speed') p.speedBoost = PLAYER.speedBoostDuration;
+      else if (pu.kind === 'shield') p.shieldHP = Math.min(p.shieldHP + 3, PLAYER.shieldMax);
       else if (pu.kind === 'bomb') p.bombs = Math.min(p.bombs + 1, 5);
       else if (pu.kind === 'fuel') {
         p.fuel = Math.min(p.fuel + FUEL.fuelPickupAmount, p.maxFuel);
@@ -266,7 +268,7 @@ export function updateEnemies(world, players) {
                 p.shieldHP--;
               } else {
                 p.lives--;
-                p.invincibleTimer = 120;
+                p.invincibleTimer = PLAYER.invincFrames;
                 sfxPlayerHit();
                 if (p.lives <= 0) {
                   // Death animation: spawn particles for each character of ship art
@@ -313,7 +315,7 @@ export function updateEnemies(world, players) {
       if (e.spawnTimer <= 0) {
         e.spawnTimer = e.spawnRate;
         // Spawn a small enemy at spawner position
-        const child = createEnemy('small', e.x + e.w / 2 - 15, e.y + e.h);
+        const child = scaleEnemy(createEnemy('small', e.x + e.w / 2 - 15, e.y + e.h), world.difficulty);
         child.pattern = 'straight';
         world.enemies.push(child);
       }
@@ -376,7 +378,8 @@ export function updateEnemies(world, players) {
     if (e.fires && e.y > 0) {
       e.fireCooldown -= 1;
       if (e.fireCooldown <= 0) {
-        e.fireCooldown = 90 + Math.random() * 80;
+        const cfg = ENEMIES[e.enemyType];
+        e.fireCooldown = cfg.fireCooldownMin + Math.random() * (cfg.fireCooldownMax - cfg.fireCooldownMin);
         const cx = e.x + e.w / 2;
         const bot = e.y + e.h;
         if (e.enemyType === 'big') {
@@ -421,6 +424,11 @@ export function updateBoss(world, players) {
   // Boss death animation: rising-pitch explosions over 2 seconds
   if (boss.dying) {
     boss.deathTimer--;
+    // Drift toward screen center so the explosion is visible
+    const centerX = WORLD_W / 2 - boss.w / 2;
+    const centerY = WORLD_H * 0.3;
+    boss.x += (centerX - boss.x) * 0.04;
+    boss.y += (centerY - boss.y) * 0.04;
     // Explosions get faster as timer counts down
     const interval = boss.deathTimer > 60 ? 10 : boss.deathTimer > 30 ? 6 : 3;
     if (boss.deathTimer % interval === 0) {
@@ -482,17 +490,18 @@ export function updateBoss(world, players) {
   // Spread shot pattern
   boss.spreadCooldown--;
   if (boss.spreadCooldown <= 0) {
-    boss.spreadCooldown = 80 + Math.random() * 40;
-    // 5-way spread
-    for (let i = -2; i <= 2; i++) {
-      world.bullets.push(createBullet(cx, bot, i * 1.2, ENEMY_BULLET.speed, 'enemy'));
+    boss.spreadCooldown = BOSS.spreadCooldown[0] + Math.random() * (BOSS.spreadCooldown[1] - BOSS.spreadCooldown[0]);
+    const half = Math.max((BOSS.spreadCount - 1) / 2, 1);
+    for (let i = 0; i < BOSS.spreadCount; i++) {
+      const vx = (i - half) * (BOSS.spreadAngle / half);
+      world.bullets.push(createBullet(cx, bot, vx, ENEMY_BULLET.speed, 'enemy'));
     }
   }
 
   // Aimed shot at player
   boss.aimedCooldown--;
   if (boss.aimedCooldown <= 0 && target) {
-    boss.aimedCooldown = 50 + Math.random() * 30;
+    boss.aimedCooldown = BOSS.aimedCooldown[0] + Math.random() * (BOSS.aimedCooldown[1] - BOSS.aimedCooldown[0]);
     const dx = (target.x + target.w / 2) - cx;
     const dy = (target.y + target.h / 2) - bot;
     const dist = Math.sqrt(dx * dx + dy * dy) || 1;
@@ -570,7 +579,6 @@ function getNearestPlayer(players, x) {
 //   5. Random jitter for unpredictability
 // Weapons: spread, rocket, rapid (3 total). Bombs/shields also in the pool.
 
-let _lastWeaponDrop = 0;
 let _weaponDroughtKills = 0; // kills since last weapon drop
 
 function checkPowerupDrop(world, enemy, players) {
@@ -623,7 +631,6 @@ function checkPowerupDrop(world, enemy, players) {
   if (Math.random() < chance) {
     world.powerups.push(createPowerUp(x, y));
     _weaponDroughtKills = 0;
-    _lastWeaponDrop = world.gameTimer;
   }
 }
 
@@ -759,7 +766,7 @@ export function updateBullets(world, players) {
 
           // Rocket AOE: damage all enemies within radius
           if (b.isRocket) {
-            const AOE_RADIUS = 60;
+            const AOE_RADIUS = PLAYER.rocketAoeRadius;
             spawnParticles(b.x, b.y, 0, '#ffaa22', 20, 6);
             sfxExplosion();
             for (const ae of world.enemies) {
@@ -768,7 +775,7 @@ export function updateBullets(world, players) {
               const dy = (ae.y + ae.h / 2) - b.y;
               const dist = Math.sqrt(dx * dx + dy * dy);
               if (dist < AOE_RADIUS) {
-                const dmg = dist < AOE_RADIUS * 0.4 ? 3 : dist < AOE_RADIUS * 0.7 ? 2 : 1;
+                const dmg = dist < AOE_RADIUS * 0.4 ? PLAYER.rocketAoeInnerDmg : dist < AOE_RADIUS * 0.7 ? PLAYER.rocketAoeMidDmg : PLAYER.rocketAoeOuterDmg;
                 ae.hp -= dmg;
                 if (ae.hp <= 0) {
                   ae.alive = false;
@@ -820,6 +827,7 @@ export function updateBullets(world, players) {
             boss.dying = true;
             boss.deathTimer = 120;
             world.spawnPause = 180;
+            world.hitStop = 6; // longer freeze for boss kill
             setMusicIntensity(1);
             resetBossDeathPitch();
             sfxBossExplosion();
@@ -837,7 +845,7 @@ export function updateBullets(world, players) {
             spawnParticles(p.x + p.w/2, p.y, 0, C.powerup, 6, 2);
           } else {
             p.lives--;
-            p.invincibleTimer = 120;
+            p.invincibleTimer = PLAYER.invincFrames;
             sfxPlayerHit();
             // Lose one random upgrade on death
             if (p.hasRapid) p.hasRapid = false;
@@ -849,6 +857,7 @@ export function updateBullets(world, players) {
               // Death animation
               spawnDeathParticles(p);
               world.screenFlash = 10;
+              world.hitStop = 4;
               p.alive = false;
             }
           }
@@ -865,18 +874,23 @@ export function updateBullets(world, players) {
       if (!p.alive || p.invincibleTimer > 0) continue;
       if (boxHit(p.x, p.y, p.w, p.h, e.x, e.y, e.w, e.h)) {
         e.alive = false;
+        world.enemiesKilled++;
+        p.score += e.score;
+        applyFuelOnKill(p, world, e);
+        checkPowerupDrop(world, e, players);
         spawnParticles(e.x + e.w/2, e.y + e.h/2, 0, C.enemySmall, 12, 4);
         sfxExplosion();
         if (p.shieldHP > 0) {
           p.shieldHP--;
         } else {
           p.lives--;
-          p.invincibleTimer = 120;
+          p.invincibleTimer = PLAYER.invincFrames;
           sfxPlayerHit();
           shake = Math.max(shake, 4);
           if (p.lives <= 0) {
             spawnDeathParticles(p);
             world.screenFlash = 10;
+            world.hitStop = 4;
             p.alive = false;
           }
         }
@@ -895,12 +909,13 @@ export function updateBullets(world, players) {
           p.shieldHP--;
         } else {
           p.lives--;
-          p.invincibleTimer = 120;
+          p.invincibleTimer = PLAYER.invincFrames;
           sfxPlayerHit();
           shake = Math.max(shake, 4);
           if (p.lives <= 0) {
             spawnDeathParticles(p);
             world.screenFlash = 10;
+            world.hitStop = 4;
             p.alive = false;
           }
         }
@@ -921,9 +936,6 @@ export function updateBullets(world, players) {
     if (pu.y > WORLD_H + 20) pu.alive = false;
   }
 
-  // Update screen flash timer
-  if (world.screenFlash > 0) world.screenFlash--;
-
   return shake;
 }
 
@@ -935,4 +947,19 @@ function getEnemyDeathColor(type) {
   if (type === 'spawner') return C.enemyBig;
   if (type === 'mine') return '#ff8800';
   return C.enemySmall;
+}
+
+// ── Update world timers (screen flash, etc.) ──
+export function updateWorldTimers(world) {
+  if (world.screenFlash > 0) world.screenFlash--;
+}
+
+// ── Reset module-scoped adaptive state between games ──
+export function resetPhysicsState() {
+  _weaponDroughtKills = 0;
+  _fuelHistory = [];
+  _lastFuelDrop = 0;
+  _killStreak = 0;
+  _killStreakTimer = 0;
+  bWasDown = false;
 }

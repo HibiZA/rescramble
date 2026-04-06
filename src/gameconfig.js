@@ -199,7 +199,6 @@ export const DAMAGE = {
   playerBullet: 1,            // normal shot
   rocketDirect: 3,            // rocket direct hit
   enemyBulletToPlayer: 1,     // (lives, not HP)
-  bossSpreadBullets: 1,
 };
 
 // ── Spawning ──
@@ -236,20 +235,12 @@ export const SPAWNING = {
 
 // ── Powerup ──
 export const POWERUPS = {
-  killsPerDrop: 20,           // enemies killed between drops
-  dropVariance: 15,           // random extra kills before drop
-  types: ['spread', 'speed', 'shield', 'rocket', 'rapid', 'bomb'],
   bombDropChance: 0.1,        // 10% chance a powerup is a bomb instead
 };
 
 // ── Enemy Bullet ──
 export const ENEMY_BULLET = {
   speed: 2.5,
-  speedScaleRate: 0.03,       // +3% speed per difficulty level
-  maxOnScreen: 4,             // base max enemy bullets
-  extraPerDifficulty: 0.5,    // extra bullets allowed per difficulty (more aggressive)
-  fireChance: 0.008,          // per-eligible-enemy per frame base
-  fireChancePerDifficulty: 0.002, // ramps faster
 };
 
 // ── Fuel ──
@@ -259,6 +250,7 @@ export const FUEL = {
   burnRate: 0.5,          // fuel consumed per tick (~33 seconds to empty)
   fuelPerKill: 8,         // fuel restored per enemy kill (was 15)
   fuelPickupAmount: 80,   // fuel from pickup item (was 100)
+  // Reserved: adaptive algorithm in physics.js controls fuel pickup chance
   fuelPickupChance: 0.08, // 8% base chance in adaptive algorithm (was 15%)
   warningThreshold: 0.25, // flash warning below 25%
 };

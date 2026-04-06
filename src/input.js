@@ -5,7 +5,7 @@ export const keys = {};
 const GAME_KEYS = new Set([
   'KeyA','KeyD','KeyW','KeyS','Space','Enter','Escape','KeyH','KeyB','KeyM',
   'ArrowLeft','ArrowRight','ArrowUp','ArrowDown',
-  'Digit1','Digit2','Numpad1','Numpad2','ShiftRight',
+  'Digit2','Numpad2',
 ]);
 function onDown(e) {
   keys[e.code] = true;

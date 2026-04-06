@@ -1,7 +1,6 @@
-import { SHIP_CONFIGS, ENEMIES as ENEMY_CFG, BOSS as BOSS_CFG, PLAYER, HAZARD, FUEL } from './gameconfig.js';
+import { SHIP_CONFIGS, ENEMIES as ENEMY_CFG, BOSS as BOSS_CFG, PLAYER, HAZARD, FUEL, POWERUPS } from './gameconfig.js';
 
-// ── Ship ASCII art defaults ──
-export const SHIP_ART = SHIP_CONFIGS[0].art;
+// ── Ship ASCII art ──
 export const SHIP2_ART = ['  ^  ', ' [*] ', '=| |='];
 
 // ── Ship definitions (driven by gameconfig.js) ──
@@ -46,9 +45,9 @@ export const ENEMY_MINE_ART = ['(*)'];
 export const ENEMY_MINE_ALT = ['(+)'];
 
 // ── Boss art variants ──
-export const BOSS_ART_SMALL = ['/[=====]\\', '|{ >O< }|', '\\[=====]/'];
-export const BOSS_ART_MEDIUM = [' /[=======]\\ ', '<|{ >>O<< }|>', ' |{ /|||\\  }| ', ' \\[=======]/ '];
-export const BOSS_ART_LARGE = ['  /[=========]\\  ', ' <|{  >>O<<  }|> ', ' <|{ /|||||\\ }|> ', '  |{  |||||  }|  ', '  \\[=========]/  '];
+const BOSS_ART_SMALL = ['/[=====]\\', '|{ >O< }|', '\\[=====]/'];
+const BOSS_ART_MEDIUM = [' /[=======]\\ ', '<|{ >>O<< }|>', ' |{ /|||\\  }| ', ' \\[=======]/ '];
+const BOSS_ART_LARGE = ['  /[=========]\\  ', ' <|{  >>O<<  }|> ', ' <|{ /|||||\\ }|> ', '  |{  |||||  }|  ', '  \\[=========]/  '];
 
 // ── Fuel rock art ──
 export const FUEL_ROCK_ART = [' /#\\', '|+F+|', ' \\#/'];
@@ -64,7 +63,7 @@ export const POWERUP_ART = {
 
 // ── Player factory (reads from gameconfig via SHIPS) ──
 export function createPlayer(id, x, y, shipType) {
-  shipType = shipType || 0;
+  shipType = shipType != null ? shipType : 0;
   const ship = SHIPS[shipType] || SHIPS[0];
   return {
     id, x, y,
@@ -191,8 +190,8 @@ export function createHazard(x, y) {
 export function createPowerUp(x, y, kind) {
   const kinds = ['spread', 'speed', 'shield', 'rocket', 'rapid'];
   if (!kind) {
-    // 10% chance to be a bomb
-    if (Math.random() < 0.1) {
+    // Chance to be a bomb (from config)
+    if (Math.random() < POWERUPS.bombDropChance) {
       kind = 'bomb';
     } else {
       kind = kinds[Math.random() * kinds.length | 0];

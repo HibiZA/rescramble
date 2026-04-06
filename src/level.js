@@ -8,7 +8,7 @@ import { createWorldObjects } from './worldobjects.js';
 // Continuously spawns enemies in patterns. Difficulty ramps over time.
 
 // Scale enemy HP and speed based on current difficulty
-function scaleEnemy(e, difficulty) {
+export function scaleEnemy(e, difficulty) {
   const d = difficulty;
   // HP scaling
   if (d >= SPAWNING.hpScaleStart) {
@@ -70,6 +70,8 @@ export function createWorld() {
     lastBossLevel: 0,     // last difficulty level that spawned a boss
     bombEffect: null,
     screenFlash: 0,
+    hitStop: 0,
+    spawnPause: 0,
     worldObjects: createWorldObjects(),
   };
 }
@@ -239,7 +241,7 @@ function spawnMines(world) {
   for (let i = 0; i < count; i++) {
     const x = findClearX(world, 40, WORLD_W - 40, placed);
     placed.push(x);
-    const e = createEnemy('mine', x, -20 - i * 70);
+    const e = scaleEnemy(createEnemy('mine', x, -20 - i * 70), d);
     world.enemies.push(e);
   }
 }
@@ -252,7 +254,7 @@ function spawnSideEntry(world) {
   for (let i = 0; i < count; i++) {
     const x = fromLeft ? -30 - i * 20 : WORLD_W + 30 + i * 20;
     const y = 20 + Math.random() * 60;
-    const e = createEnemy('small', x, y);
+    const e = scaleEnemy(createEnemy('small', x, y), d);
     e.pattern = fromLeft ? 'leftEntry' : 'rightEntry';
     e.patternData = { targetX: targetX, entered: false };
     world.enemies.push(e);

@@ -19,4 +19,5 @@ export const C = {
   particle: ['#00ffcc', '#ff66cc', '#ffee44', '#cc44ff', '#44ffaa', '#ff3355'],
   ui: '#88aadd',
   score: '#ffee44',
+  badge: '#666688',
 };

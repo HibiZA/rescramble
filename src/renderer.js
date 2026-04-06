@@ -391,9 +391,9 @@ export function renderWorld(world, players, gameTime, uiData) {
     if (coopMode && pl[1]) stampText(`HP${pl[1].lives} ${pl[1].score}`, W - 10, 8, C.player2, 0.9, 'right');
     stampText(`LV${w.difficulty}`, W / 2, 8, C.ui, 0.7, 'center');
     const weaps = [];
-    if (pl[0].hasSpread) weaps.push('SPR');
+    if (pl[0].spreadLevel > 0) weaps.push('SPR' + pl[0].spreadLevel);
     if (pl[0].hasRocket) weaps.push('RKT');
-    if (pl[0].hasRapid) weaps.push('RPD');
+    if (pl[0].rapidLevel > 0) weaps.push('RPD' + pl[0].rapidLevel);
     if (weaps.length) stampText(weaps.join('+'), 10, 24, C.powerup, 0.7, 'left');
 
     // Bomb count display

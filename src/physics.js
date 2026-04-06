@@ -1,5 +1,5 @@
 import { WORLD_W, WORLD_H, C } from './constants.js';
-import { PLAYER, ENEMY_BULLET, SHIP_CONFIGS, FUEL, BOSS, ENEMIES, DAMAGE } from './gameconfig.js';
+import { PLAYER, ENEMY_BULLET, SHIP_CONFIGS, FUEL, BOSS, ENEMIES, DAMAGE, POWERUPS } from './gameconfig.js';
 import { createBullet, createPowerUp, createEnemy } from './entities.js';
 import { keys, touch } from './input.js';
 import { spawnParticles } from './particles.js';
@@ -139,16 +139,19 @@ export function updatePlayer(p, world, coopMode) {
     const top = p.y - 4;
     const spd = -PLAYER.bulletSpeed;
 
-    if (p.hasSpread) {
-      world.bullets.push(createBullet(cx, top, 0, spd, 'player', DAMAGE.playerBullet));
-      world.bullets.push(createBullet(cx, top, -2.5, spd, 'player', DAMAGE.playerBullet));
-      world.bullets.push(createBullet(cx, top, 2.5, spd, 'player', DAMAGE.playerBullet));
-    } else {
-      world.bullets.push(createBullet(cx, top, 0, spd, 'player', DAMAGE.playerBullet));
+    // Spread: LV0=1 bullet, LV1=3, LV2=5, LV3=7
+    const bulletCount = 1 + (p.spreadLevel || 0) * 2;
+    world.bullets.push(createBullet(cx, top, 0, spd, 'player', DAMAGE.playerBullet));
+    for (let i = 1; i < bulletCount; i += 2) {
+      const angle = ((i + 1) / 2) * 1.4;
+      world.bullets.push(createBullet(cx, top, -angle, spd, 'player', DAMAGE.playerBullet));
+      world.bullets.push(createBullet(cx, top, angle, spd, 'player', DAMAGE.playerBullet));
     }
 
     sfxShoot();
-    p.fireCooldown = p.hasRapid ? Math.floor(PLAYER.fireRate / 2) : PLAYER.fireRate;
+    // Rapid: LV0=normal, LV1=half cooldown, LV2=third cooldown
+    const rapidDiv = 1 + (p.rapidLevel || 0);
+    p.fireCooldown = Math.max(2, Math.floor(PLAYER.fireRate / rapidDiv));
   }
 
   // Rockets: separate slower cooldown (3x bullet rate)
@@ -213,9 +216,9 @@ export function updatePlayer(p, world, coopMode) {
       pu.alive = false;
       spawnParticles(pu.x, pu.y, 0, C.powerup, 8, 3);
       sfxPowerup();
-      if (pu.kind === 'spread') p.hasSpread = true;
+      if (pu.kind === 'spread') p.spreadLevel = Math.min((p.spreadLevel || 0) + 1, PLAYER.spreadMaxLevel);
       else if (pu.kind === 'rocket') p.hasRocket = true;
-      else if (pu.kind === 'rapid') p.hasRapid = true;
+      else if (pu.kind === 'rapid') p.rapidLevel = Math.min((p.rapidLevel || 0) + 1, PLAYER.rapidMaxLevel);
       else if (pu.kind === 'speed') p.speedBoost = PLAYER.speedBoostDuration;
       else if (pu.kind === 'shield') p.shieldHP = Math.min(p.shieldHP + 3, PLAYER.shieldMax);
       else if (pu.kind === 'bomb') p.bombs = Math.min(p.bombs + 1, 5);
@@ -453,7 +456,8 @@ export function updateBoss(world, players) {
       const scorer = players.find(p => p.alive) || players[0];
       if (scorer) scorer.score += boss.score;
       world.enemiesKilled += 10;
-      world.powerups.push(createPowerUp(boss.x + boss.w / 2, boss.y + boss.h / 2));
+      const bossDropKind = pickWeaponKind(scorer);
+      world.powerups.push(createPowerUp(boss.x + boss.w / 2, boss.y + boss.h / 2, bossDropKind));
       world.boss = null;
     }
     return;
@@ -536,9 +540,9 @@ export function updateHazards(world, players) {
       if (!p.alive || p.invincibleTimer > 0) continue;
       if (boxHit(p.x, p.y, p.w, p.h, h.x, h.y, h.w, h.h)) {
         // Strip everything + halve fuel
-        p.hasSpread = false;
+        p.spreadLevel = 0;
         p.hasRocket = false;
-        p.hasRapid = false;
+        p.rapidLevel = 0;
         p.speedBoost = 0;
         p.shieldHP = 0;
         p.fuel = Math.floor(p.fuel / 2);
@@ -593,9 +597,9 @@ function checkPowerupDrop(world, enemy, players) {
   const scorer = players ? (players.find(p => p.alive) || players[0]) : null;
   let weaponCount = 0;
   if (scorer) {
-    if (scorer.hasSpread) weaponCount++;
+    weaponCount += (scorer.spreadLevel || 0) / PLAYER.spreadMaxLevel;
     if (scorer.hasRocket) weaponCount++;
-    if (scorer.hasRapid) weaponCount++;
+    weaponCount += (scorer.rapidLevel || 0) / PLAYER.rapidMaxLevel;
     if (scorer.shieldHP > 0) weaponCount += 0.5;
     if (scorer.bombs > 1) weaponCount += 0.3;
   }
@@ -632,9 +636,50 @@ function checkPowerupDrop(world, enemy, players) {
   if (weaponCount >= 3) chance *= 0.3;
 
   if (Math.random() < chance) {
-    world.powerups.push(createPowerUp(x, y));
+    const kind = pickWeaponKind(scorer);
+    world.powerups.push(createPowerUp(x, y, kind));
     _weaponDroughtKills = 0;
   }
+}
+
+// ── Weighted powerup kind selection ──
+// Upgrades you already have are less likely to drop again.
+function pickWeaponKind(player) {
+  if (Math.random() < POWERUPS.bombDropChance) return 'bomb';
+
+  const kinds = [
+    { kind: 'spread',  weight: 1 },
+    { kind: 'rapid',   weight: 1 },
+    { kind: 'rocket',  weight: 1 },
+    { kind: 'speed',   weight: 1 },
+    { kind: 'shield',  weight: 1 },
+  ];
+
+  if (player) {
+    for (const entry of kinds) {
+      if (entry.kind === 'spread') {
+        // Reduce weight by 60% per spread level
+        entry.weight *= Math.pow(0.4, player.spreadLevel || 0);
+        if ((player.spreadLevel || 0) >= PLAYER.spreadMaxLevel) entry.weight = 0.05;
+      } else if (entry.kind === 'rapid') {
+        entry.weight *= Math.pow(0.4, player.rapidLevel || 0);
+        if ((player.rapidLevel || 0) >= PLAYER.rapidMaxLevel) entry.weight = 0.05;
+      } else if (entry.kind === 'rocket' && player.hasRocket) {
+        entry.weight = 0.05;
+      } else if (entry.kind === 'shield' && player.shieldHP >= PLAYER.shieldMax) {
+        entry.weight = 0.15;
+      }
+    }
+  }
+
+  // Weighted random selection
+  const totalWeight = kinds.reduce((s, k) => s + k.weight, 0);
+  let roll = Math.random() * totalWeight;
+  for (const entry of kinds) {
+    roll -= entry.weight;
+    if (roll <= 0) return entry.kind;
+  }
+  return kinds[kinds.length - 1].kind;
 }
 
 // ── Adaptive fuel drop algorithm ──
@@ -851,9 +896,9 @@ export function updateBullets(world, players) {
             p.invincibleTimer = PLAYER.invincFrames;
             sfxPlayerHit();
             // Lose one random upgrade on death
-            if (p.hasRapid) p.hasRapid = false;
+            if (p.rapidLevel > 0) p.rapidLevel--;
             else if (p.hasRocket) p.hasRocket = false;
-            else if (p.hasSpread) p.hasSpread = false;
+            else if (p.spreadLevel > 0) p.spreadLevel--;
             spawnParticles(p.x + p.w/2, p.y + p.h/2, 0, p.id === 0 ? C.player1 : C.player2, 15, 5);
             shake = Math.max(shake, 3);
             if (p.lives <= 0) {

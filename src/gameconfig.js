@@ -23,6 +23,8 @@ export const PLAYER = {
   speedBoostAmount: 2,       // extra speed when speed-boosted
   speedBoostDuration: 600,   // frames
   shieldMax: 5,              // max shield HP
+  spreadMaxLevel: 3,          // max spread level (LV1=3, LV2=5, LV3=7 bullets)
+  rapidMaxLevel: 2,           // max rapid level (LV1=half, LV2=third cooldown)
 };
 
 // ── Ship Configs ──
@@ -66,8 +68,8 @@ export const SHIP_CONFIGS = [
     ability: 'Spread + rapid',
     unlock: '500 total kills',
     unlockCheck: (p) => p.totalKills >= 500,
-    startSpread: true,
-    startRapid: true,
+    startSpread: 1,
+    startRapid: 1,
     bombName: 'MEGA BURST',
     bombDesc: '20 bullets all directions',
   },
@@ -209,7 +211,7 @@ export const SPAWNING = {
   difficultyRampFrames: 600,  // frames per difficulty level (~10s)
   // Enemy HP scaling: enemies get tougher at higher levels
   hpScaleStart: 10,           // difficulty level where HP scaling begins
-  hpScaleRate: 0.15,          // +15% HP per level above hpScaleStart
+  hpScaleRate: 0.10,          // +10% HP per level above hpScaleStart
   // Enemy speed scaling
   speedScaleStart: 15,
   speedScaleRate: 0.05,       // +5% speed per level above speedScaleStart
@@ -250,7 +252,7 @@ export const FUEL = {
   burnRate: 0.5,              // base fuel consumed per tick (~33 seconds to empty)
   burnRateScaleStart: 8,      // difficulty level where burn rate starts increasing
   burnRateScale: 0.02,        // extra burn per tick per difficulty level above scaleStart
-  fuelPerKill: 3,             // fuel restored per enemy kill
+  fuelPerKill: 5,             // fuel restored per enemy kill
   fuelPickupAmount: 80,       // fuel from pickup item
   // Reserved: adaptive algorithm in physics.js controls fuel pickup chance
   fuelPickupChance: 0.08,     // 8% base chance in adaptive algorithm

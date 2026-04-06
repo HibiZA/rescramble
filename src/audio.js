@@ -268,6 +268,7 @@ export function stopMusic() {
 export function setMusicIntensity(level) {
   // level 0 = menu (calm), 1 = playing, 2 = boss fight
   if (!musicNodes) return;
+  if (muted) return;
   const targetVol = level === 0 ? MUSIC_VOLUME * 0.6
     : level === 2 ? MUSIC_VOLUME * 1.5
     : MUSIC_VOLUME;

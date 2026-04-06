@@ -12,9 +12,10 @@ FROM nginx:alpine
 RUN rm /etc/nginx/conf.d/default.conf
 COPY nginx.conf /etc/nginx/conf.d/rescramble.conf
 
-# Copy production HTML + bundled JS
+# Copy production HTML + bundled JS + favicon
 COPY index.prod.html /usr/share/nginx/html/index.html
 COPY --from=build /app/dist/game.js /usr/share/nginx/html/game.js
+COPY favicon.svg /usr/share/nginx/html/favicon.svg
 
 # Pre-create temp directories
 RUN mkdir -p /var/cache/nginx/client_temp \

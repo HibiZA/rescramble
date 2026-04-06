@@ -456,7 +456,7 @@ export function renderWorld(world, players, gameTime, uiData) {
 }
 
 // ── Menu ──
-export function renderMenu(menuBob, selectedShip, progress) {
+export function renderMenu(menuBob, selectedShip, progress, menuScores) {
   ensureCW();
   const W = width(), H = height();
   const cols = Math.ceil(W / CW) + 1, rows = Math.ceil(H / CH) + 1;
@@ -503,22 +503,27 @@ export function renderMenu(menuBob, selectedShip, progress) {
   // ── Divider ──
   stampText('--------------------', W / 2, 272, C.ui, 0.2, 'center');
 
-  // ── Score table ──
-  stampText('\\v/', W / 2 - 60, 296, C.enemySmall, 0.8, 'center');
-  stampText('10 pts', W / 2 + 50, 296, C.text, 0.5, 'center');
-  stampText('={O}=', W / 2 - 60, 316, C.enemyMed, 0.8, 'center');
-  stampText('25 pts', W / 2 + 50, 316, C.text, 0.5, 'center');
-  stampText('([===])', W / 2 - 60, 336, C.enemyBig, 0.8, 'center');
-  stampText('50 pts', W / 2 + 50, 336, C.text, 0.5, 'center');
+  // ── Leaderboard ──
+  if (menuScores && menuScores.length > 0) {
+    stampText('HIGH SCORES', W / 2, 290, C.score, 0.7, 'center');
+    const maxShow = Math.min(menuScores.length, 5);
+    for (let i = 0; i < maxShow; i++) {
+      const s = menuScores[i];
+      const rank = `${i + 1}.`.padStart(3);
+      const name = (s.name || '???').padEnd(10).slice(0, 10);
+      const score = String(s.score).padStart(7);
+      stampText(`${rank} ${name} ${score}`, W / 2, 310 + i * 16, C.text, 0.5, 'center');
+    }
+  }
 
   // ── Divider ──
-  stampText('--------------------', W / 2, 356, C.ui, 0.2, 'center');
+  stampText('--------------------', W / 2, 404, C.ui, 0.2, 'center');
 
   // ── Start prompt ──
   if (isUnlocked && Math.sin(menuBob * 3) > 0) {
-    stampText('>> PRESS ENTER <<', W / 2, 380, C.player1, 0.9, 'center');
+    stampText('>> PRESS ENTER <<', W / 2, 424, C.player1, 0.9, 'center');
   }
-  stampText('Press 2 for co-op', W / 2, 404, C.text, 0.3, 'center');
+  stampText('Press 2 for co-op', W / 2, 448, C.text, 0.3, 'center');
 
   // ── Bottom ──
   stampText('WASD:Move SPACE:Fire', W / 2, H - 64, C.ui, 0.3, 'center');

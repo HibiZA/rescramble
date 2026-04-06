@@ -48,6 +48,10 @@ let nameInput = '';
 let nameSubmitted = false;
 let leaderboardScores = [];
 let leaderboardFetched = false;
+let menuScores = [];
+
+// Fetch leaderboard for menu on load
+fetchScores().then(scores => { menuScores = scores || []; });
 
 // Capture text input for name entry
 window.addEventListener('keydown', (e) => {
@@ -189,7 +193,7 @@ function gameLoop() {
 
   switch (state) {
     case 'menu':
-      renderer.renderMenu(menuBob, selectedShip, progress);
+      renderer.renderMenu(menuBob, selectedShip, progress, menuScores);
       // Ship switching with A/D or left/right
       {
         const leftPressed = (keys['KeyA'] || keys['ArrowLeft']) && !leftWasDown;
@@ -294,6 +298,7 @@ function gameLoop() {
           lastNewUnlocks = [];
           nameInput = '';
           nameSubmitted = false;
+          fetchScores().then(scores => { menuScores = scores || []; });
           leaderboardScores = [];
           leaderboardFetched = false;
         }

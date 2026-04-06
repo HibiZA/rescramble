@@ -401,7 +401,7 @@ export function renderWorld(world, players, gameTime, uiData) {
       stampText(`B:${pl[0].bombs}`, 10, 40, '#ff44ff', 0.8, 'left');
     }
 
-    // Fuel bar
+    // Fuel bar (bottom of screen, near the player)
     {
       const fuelRatio = pl[0].fuel / pl[0].maxFuel;
       const barLen = 10;
@@ -411,7 +411,7 @@ export function renderWorld(world, players, gameTime, uiData) {
       const fuelColor = fuelRatio > 0.5 ? '#44ff44' : fuelRatio > 0.25 ? '#ffcc00' : '#ff3333';
       const blinkFuel = fuelRatio < FUEL.warningThreshold && Math.floor(gt / 10) % 2 === 0;
       if (!blinkFuel) {
-        stampText(`FUEL [${barStr}]`, 10, 56, fuelColor, 0.8, 'left');
+        stampText(`FUEL [${barStr}]`, 10, H - 10, fuelColor, 0.8, 'left');
       }
     }
 
@@ -423,7 +423,6 @@ export function renderWorld(world, players, gameTime, uiData) {
     }
 
     if (startTimer > 0) stampText('GET READY', W / 2, H / 2 - 16, C.title, Math.min(1, startTimer / 20), 'center');
-    stampText('VIBE JAM 2026', W - 10, H - 10, C.badge, 0.4, 'right');
     if (uiData.fps) stampText(`${uiData.fps}fps`, W - 10, 8, '#336644', 0.35, 'right');
   }
 
@@ -540,33 +539,74 @@ export function renderPaused(gameTime) {
   ctx.save(); renderGrid(); ctx.restore();
 }
 
-export function renderGameOver(players, world, gameTime, newUnlocks) {
+export function renderGameOver(players, world, gameTime, newUnlocks, nameInput, leaderboardScores) {
   ensureCW();
   const W = width(), H = height();
   const cols = Math.ceil(W / CW) + 1, rows = Math.ceil(H / CH) + 1;
   initGrid(cols, rows);
   fillBackground(gameTime * 0.3);
   const total = players.reduce((s, p) => s + p.score, 0);
-  stampText('GAME OVER', W / 2, H * 0.25, '#ff3355', 1.0, 'center');
-  stampText(`SCORE: ${total}`, W / 2, H * 0.38, C.score, 0.9, 'center');
-  stampText(`${world.enemiesKilled} kills LV${world.difficulty}`, W / 2, H * 0.46, C.text, 0.5, 'center');
+  stampText('GAME OVER', W / 2, H * 0.08, '#ff3355', 1.0, 'center');
+  stampText(`SCORE: ${total}`, W / 2, H * 0.16, C.score, 0.9, 'center');
+  stampText(`${world.enemiesKilled} kills LV${world.difficulty}`, W / 2, H * 0.22, C.text, 0.5, 'center');
 
   // Show newly unlocked ships
+  let baseY = H * 0.28;
   if (newUnlocks && newUnlocks.length > 0) {
-    let uy = H * 0.54;
-    stampText('NEW UNLOCK!', W / 2, uy, C.powerup, 0.9, 'center');
-    uy += 20;
+    stampText('NEW UNLOCK!', W / 2, baseY, C.powerup, 0.9, 'center');
+    baseY += 18;
     for (const idx of newUnlocks) {
       const ship = SHIPS[idx];
       if (ship) {
         const blink = Math.sin(gameTime * 0.12) > -0.2 ? 1.0 : 0.5;
-        stampText(`>> ${ship.name} <<`, W / 2, uy, '#ffee44', blink, 'center');
-        uy += 18;
+        stampText(`>> ${ship.name} <<`, W / 2, baseY, '#ffee44', blink, 'center');
+        baseY += 16;
       }
     }
+    baseY += 4;
   }
 
-  if (Math.sin(gameTime * 0.08) > 0) stampText('PRESS ENTER', W / 2, H * 0.72, C.ui, 0.7, 'center');
+  if (leaderboardScores === null) {
+    // Name entry phase
+    stampText('ENTER YOUR NAME', W / 2, baseY, C.ui, 0.7, 'center');
+    baseY += 20;
+    const cursor = Math.sin(gameTime * 0.15) > 0 ? '_' : ' ';
+    const displayName = (nameInput || '') + cursor;
+    stampText(`> ${displayName} <`, W / 2, baseY, C.player1, 1.0, 'center');
+    baseY += 24;
+    if (nameInput && nameInput.trim().length > 0) {
+      if (Math.sin(gameTime * 0.08) > 0) {
+        stampText('ENTER to submit', W / 2, baseY, C.ui, 0.6, 'center');
+      }
+    } else {
+      stampText('Type your name...', W / 2, baseY, C.ui, 0.3, 'center');
+    }
+  } else {
+    // Leaderboard phase
+    stampText('-- LEADERBOARD --', W / 2, baseY, C.title, 0.8, 'center');
+    baseY += 20;
+
+    if (leaderboardScores.length === 0) {
+      stampText('Loading...', W / 2, baseY, C.ui, 0.4, 'center');
+    } else {
+      const maxShow = Math.min(leaderboardScores.length, 10);
+      for (let i = 0; i < maxShow; i++) {
+        const s = leaderboardScores[i];
+        const rank = `${i + 1}.`.padStart(3);
+        const name = (s.name || '???').padEnd(12).slice(0, 12);
+        const score = String(s.score).padStart(7);
+        const isYou = s.name === (nameInput || '').trim() && s.score === total;
+        const color = isYou ? C.score : C.text;
+        const alpha = isYou ? 0.9 : 0.5;
+        stampText(`${rank} ${name} ${score}`, W / 2, baseY, color, alpha, 'center');
+        baseY += 15;
+      }
+    }
+
+    baseY += 10;
+    if (Math.sin(gameTime * 0.08) > 0) stampText('ENTER to continue', W / 2, baseY, C.ui, 0.7, 'center');
+  }
+
   ctx.save(); renderGrid(); ctx.restore();
 }
 

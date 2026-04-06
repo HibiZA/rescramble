@@ -3,6 +3,8 @@ services:
     build: .
     container_name: rescramble
     restart: always
+    depends_on:
+      - backend
     expose:
       - "80"
     read_only: true
@@ -24,6 +26,25 @@ services:
     networks:
       - web
 
+  backend:
+    build: ./server
+    container_name: rescramble-backend
+    restart: always
+    expose:
+      - "3000"
+    volumes:
+      - scores_data:/app/data
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    mem_limit: 128m
+    cpus: 0.5
+    networks:
+      - web
+
   caddy:
     image: caddy:alpine
     container_name: rescramble-caddy
@@ -41,6 +62,7 @@ services:
 volumes:
   caddy_data:
   caddy_config:
+  scores_data:
 
 networks:
   web:

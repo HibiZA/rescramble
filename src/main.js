@@ -9,6 +9,7 @@ import { updateWorldObjects, cleanupWorldObjects } from './worldobjects.js';
 import { loadProgress, updateProgress } from './progress.js';
 import * as renderer from './renderer.js';
 import { sfxMenuSelect, resumeAudio, startMusic, stopMusic, setMusicIntensity, toggleMute, isMuted } from './audio.js';
+import { submitScore, fetchScores, requestToken } from './leaderboard.js';
 
 let state = 'menu';
 let prevState = 'menu'; // track where help was opened from
@@ -42,8 +43,29 @@ let leftWasDown = false;
 let rightWasDown = false;
 let enterWasDown = false;
 
+// Leaderboard state
+let nameInput = '';
+let nameSubmitted = false;
+let leaderboardScores = [];
+let leaderboardFetched = false;
+
+// Capture text input for name entry
+window.addEventListener('keydown', (e) => {
+  if (state !== 'gameover' || nameSubmitted) return;
+  if (e.key === 'Backspace') {
+    nameInput = nameInput.slice(0, -1);
+    e.preventDefault();
+  } else if (e.key.length === 1 && nameInput.length < 12) {
+    // Allow alphanumeric, spaces, and common symbols
+    if (/[a-zA-Z0-9 _\-.]/.test(e.key)) {
+      nameInput += e.key;
+    }
+  }
+});
+
 function startGame(coop, shipType) {
   resetPhysicsState();
+  requestToken(); // get session token for leaderboard
   coopMode = coop;
   players = [createPlayer(0, 220, 560, shipType || 0)];
   if (coop) players.push(createPlayer(1, 260, 560, 0));
@@ -245,13 +267,36 @@ function gameLoop() {
       break;
 
     case 'gameover':
-      renderer.renderGameOver(players, world, gameTime, lastNewUnlocks);
-      if (enterPressed || touch.jump) {
-        sfxMenuSelect();
-        state = 'menu';
-        keys['Enter'] = false;
-        touch.jump = false;
-        lastNewUnlocks = [];
+      if (!nameSubmitted) {
+        // Name entry phase
+        renderer.renderGameOver(players, world, gameTime, lastNewUnlocks, nameInput, null);
+        if (enterPressed || touch.jump) {
+          keys['Enter'] = false;
+          touch.jump = false;
+          if (nameInput.trim().length > 0) {
+            sfxMenuSelect();
+            nameSubmitted = true;
+            const total = players.reduce((s, p) => s + p.score, 0);
+            const shipName = SHIPS[players[0].shipType || 0]?.name || 'SCOUT';
+            submitScore(nameInput.trim(), total, world.difficulty, world.enemiesKilled, shipName)
+              .then(() => fetchScores())
+              .then(scores => { leaderboardScores = scores || []; leaderboardFetched = true; });
+          }
+        }
+      } else {
+        // Leaderboard phase
+        renderer.renderGameOver(players, world, gameTime, lastNewUnlocks, nameInput, leaderboardScores);
+        if (enterPressed || touch.jump) {
+          sfxMenuSelect();
+          state = 'menu';
+          keys['Enter'] = false;
+          touch.jump = false;
+          lastNewUnlocks = [];
+          nameInput = '';
+          nameSubmitted = false;
+          leaderboardScores = [];
+          leaderboardFetched = false;
+        }
       }
       break;
   }
